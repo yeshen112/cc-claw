@@ -13,7 +13,8 @@ import { PetContextMenu, PomodoroOverlay } from './components/PetContextMenu'
 import {
   type AppMode, type PetData, type PetAction, type PomodoroState,
   loadAppMode, saveAppMode, loadPetData, savePetData, tickPetData,
-  loadAppModeVersion, saveAppModeVersion,
+  loadAppModeVersion, saveAppModeVersion, isAppModeOnboardingStale,
+  APP_MODE_ONBOARDING_VERSION,
   defaultPetData, getAffectionTier, canWalk,
   POMODORO_COINS_PER_MIN, AFFECTION_ACTIVITY_PER_10MIN, AFFECTION_MAX,
   HUNGER_ACTIVITY_PER_HOUR, HUNGER_OFFLINE_FLOOR,
@@ -686,6 +687,7 @@ export default function Mini() {
   }
 
   const { t, i18n } = useTranslation()
+  // URL is sourced from `ui.petdex.url`. We deliberately do NOT fall
   // URL is sourced from `ui.petdex.url`. We deliberately do NOT fall
   // back to a hardcoded value — when the fetch fails or the field is
   // missing, PetPicker shows a "network error" message so users
@@ -3245,6 +3247,7 @@ export default function Mini() {
       }}
     >
       {/* Collapsed */}
+      {!expanded && !hiding && (
         <div
           id="mini-panel"
           onMouseEnter={() => {
@@ -3268,7 +3271,6 @@ export default function Mini() {
             cursor: 'default',
           }}
         >
-          {!expanded && !hiding && (
           <div
             onPointerDown={handleMascotPointerDown}
             onContextMenu={handleMascotContextMenu}
