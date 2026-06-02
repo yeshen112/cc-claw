@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { load } from '@tauri-apps/plugin-store'
-import { emit, listen } from '@tauri-apps/api/event'
+import { listen } from '@tauri-apps/api/event'
 import { ChevronDown, Loader2, X, Pin, Bell, BellOff, Settings, Asterisk, Trash2, Cloud } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import ReactMarkdown from 'react-markdown'
@@ -107,7 +107,7 @@ const MASCOT_BASE_SIZE = 43
 const MINI_SPRITE_DISPLAY_MULTIPLIER = 2
 const SESSION_SPRITE_DISPLAY_MULTIPLIER = 0.88
 
-type PetState = 'idle' | 'working' | 'compacting' | 'waiting'
+type PetState = 'idle' | 'working' | 'compacting' | 'waiting' | 'failed'
 type ClaudeStatsSource = 'cc' | 'codex' | 'cursor'
 const TRANSIENT_PET_ACTIONS: PetAction[] = ['eat', 'headpat', 'dance', 'farewell', 'angry', 'spin', 'milktea', 'walkout']
 
@@ -691,10 +691,7 @@ export default function Mini() {
   // URL is sourced from `ui.petdex.url`. We deliberately do NOT fall
   // back to a hardcoded value — when the fetch fails or the field is
   // missing, PetPicker shows a "network error" message so users
-  // understand why the link is unavailable rather than us silently
-  // routing them to a possibly-stale URL.
-  const [petdexUrl, setPetdexUrl] = useState<string | null>(null)
-  const [petdexFailed, setPetdexFailed] = useState(false)
+  const [petdexUrl] = useState<string | null>('https://codexpet.xyz')
 
   // Load mini character from store
   const loadMiniChar = useCallback(async () => {
@@ -2896,9 +2893,14 @@ export default function Mini() {
   const claudeWaiting = visibleClaudeSessions.some((cs) => cs.status === 'waiting')
   const claudeCompacting = visibleClaudeSessions.some((cs) => cs.status === 'compacting')
   const claudeWorking = visibleClaudeSessions.some((cs) => cs.status === 'processing' || cs.status === 'tool_running')
+  // Recently failed: a session stopped by interruption within the last 3s
+  const now = Date.now()
+  const claudeFailed = visibleClaudeSessions.some(
+    (cs) => cs.status === 'stopped' && (cs as any).isInterrupted && cs.updatedAt && (now - cs.updatedAt * 1000) < 3000
+  )
   const hasWorking = anySessionActive || Object.values(healthMap).some(Boolean) || claudeWorking || claudeCompacting || claudeWaiting
-  // Priority: waiting > compacting > working > idle
-  const mainPetState: PetState = claudeWaiting ? 'waiting' : claudeCompacting ? 'compacting' : hasWorking ? 'working' : 'idle'
+  // Priority: failed > waiting > compacting > working > idle
+  const mainPetState: PetState = claudeFailed ? 'failed' : claudeWaiting ? 'waiting' : claudeCompacting ? 'compacting' : hasWorking ? 'working' : 'idle'
   // Sprite resting state for the main mascot. Walking direction (set by
   // the walk timer) overrides the working/waiting/idle mapping so the pet
   // visibly runs left/right while the native window is moving.
@@ -2907,15 +2909,6 @@ export default function Mini() {
     : walkDir === -1
       ? 'run-left'
       : petStateToCodexState(mainPetState)
-  // Broadcast the resolved mascot state so dev-mode demo windows can
-  // mirror it. The main window owns the polling loops that derive
-  // working / waiting / idle (claude sessions every 2s, agents every
-  // 5s, health every 1s); demo windows have no business duplicating
-  // those polls. Emit on every change for low-latency mirroring, plus
-  // a 2s periodic re-emit so a freshly-spawned demo window catches
-  // the current state without waiting for the next change.
-  const mainPetStateRef = useRef<PetState>(mainPetState)
-  mainPetStateRef.current = mainPetState
   // Diagnostic (dev only): emit a backend log line whenever the mascot state
   // changes, including which claude sessions (and other inputs) are pinning
   // it. Helps pinpoint stuck-mascot bugs without opening webview DevTools.
@@ -2932,18 +2925,6 @@ export default function Mini() {
     lastMascotLogRef.current = summary
     invoke('debug_log', { scope: 'mascot', msg: summary }).catch(() => {})
   }, [mainPetState, hasWorking, anySessionActive, healthMap, claudeWorking, claudeWaiting, claudeCompacting, visibleClaudeSessions])
-  useEffect(() => {
-    if (appMode !== 'coding') return
-    emit('mini-pet-state', { state: mainPetState }).catch(() => {})
-  }, [mainPetState, appMode])
-  useEffect(() => {
-    if (appMode !== 'coding') return
-    const t = setInterval(() => {
-      emit('mini-pet-state', { state: mainPetStateRef.current }).catch(() => {})
-    }, 2000)
-    return () => clearInterval(t)
-  }, [appMode])
-
   const fallbackLargeActions = useMemo(() => {
     const c = characters.find((ch) => ch.largeActions && Object.keys(ch.largeActions).length > 0)
     return c?.largeActions
@@ -4152,169 +4133,6 @@ export default function Mini() {
                                        此面板。包含四个操作按钮：拒绝、允许一次、
                                        全部允许、自动批准。
                                        用途：让用户无需切换到终端即可快速处理权限请求。 */}
-                                    {isWaiting && cs.source !== 'cursor' && (
-                                      <div className="mt-2 flex flex-col" style={{ maxHeight: panelMaxHeight - 140 }}>
-                                        {cs.tool && (
-                                          <div className="flex items-center gap-1.5 mb-2">
-                                            <span className="text-amber-400 text-[12px]">⚠</span>
-                                            <span className="text-amber-400 text-[12px] font-bold">{cs.tool}</span>
-                                          </div>
-                                        )}
-                                        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                                        {cs.toolInput &&
-                                          (() => {
-                                            try {
-                                              const input = JSON.parse(cs.toolInput)
-                                              // Write/Edit: show file name + numbered code lines
-                                              if ((cs.tool === 'Write' || cs.tool === 'Edit') && (input.file_path || input.content)) {
-                                                const fileName = input.file_path ? input.file_path.split('/').pop() : ''
-                                                const isNew = cs.tool === 'Write'
-                                                const content = input.content || input.new_string || input.old_string || ''
-                                                const lines = content.split('\n')
-                                                return (
-                                                  <div className="mb-2 rounded-lg bg-[#1a1a1e] border border-[#2a2a2e] overflow-hidden">
-                                                    {fileName && (
-                                                      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#2a2a2e] sticky top-0 bg-[#1a1a1e] z-10">
-                                                        <span className="text-[12px] text-slate-300 font-mono">{fileName}</span>
-                                                        {isNew && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-400">{t('mini.newFile', '新文件')}</span>}
-                                                      </div>
-                                                    )}
-                                                    <div className="px-3 py-2 overflow-y-auto scrollbar-thin" style={{ maxHeight: 120 }}>
-                                                      {lines.map((line: string, i: number) => (
-                                                        <div key={i} className="flex gap-3 leading-[1.6]">
-                                                          <span className="text-[11px] text-slate-600 font-mono select-none w-5 text-right shrink-0">{i + 1}</span>
-                                                          <pre className="text-[11px] text-slate-300 font-mono whitespace-pre-wrap break-all">{line || ' '}</pre>
-                                                        </div>
-                                                      ))}
-                                                    </div>
-                                                  </div>
-                                                )
-                                              }
-                                              if (typeof input.justification === 'string' && input.justification.trim()) {
-                                                return (
-                                                  <div className="mb-2 p-2.5 rounded-lg bg-[#1a1a1e] border border-[#2a2a2e] overflow-auto" style={{ maxHeight: 120 }}>
-                                                    <pre className="text-[11px] text-amber-300 font-mono whitespace-pre-wrap break-all leading-tight">{input.justification}</pre>
-                                                  </div>
-                                                )
-                                              }
-                                              // Bash: show command
-                                              if (cs.tool === 'Bash' && input.command) {
-                                                return (
-                                                  <div className="mb-2 p-2.5 rounded-lg bg-[#1a1a1e] border border-[#2a2a2e] overflow-auto" style={{ maxHeight: 120 }}>
-                                                    <pre className="text-[11px] text-slate-300 font-mono whitespace-pre-wrap break-all leading-tight">{input.command}</pre>
-                                                  </div>
-                                                )
-                                              }
-                                              // Fallback: show parsed fields
-                                              const preview = input.command || input.file_path || input.content?.slice(0, 150) || cs.toolInput.slice(0, 150)
-                                              return (
-                                                <div className="mb-2 p-2.5 rounded-lg bg-[#1a1a1e] border border-[#2a2a2e] overflow-auto" style={{ maxHeight: 120 }}>
-                                                  <pre className="text-[11px] text-slate-400 font-mono whitespace-pre-wrap break-all leading-tight">{preview}</pre>
-                                                </div>
-                                              )
-                                            } catch {
-                                              return (
-                                                <div className="mb-2 p-2.5 rounded-lg bg-[#1a1a1e] border border-[#2a2a2e] overflow-auto" style={{ maxHeight: 120 }}>
-                                                  <pre className="text-[11px] text-slate-400 font-mono whitespace-pre-wrap break-all leading-tight">{cs.toolInput.slice(0, 150)}</pre>
-                                                </div>
-                                              )
-                                            }
-                                          })()}
-                                        </div>
-                                        <div className="flex gap-2 shrink-0 mt-2">
-                                          {(() => {
-                                            // Immediately clear the waiting state locally so
-                                            // the permission popup closes without waiting for
-                                            // the next 2s poll cycle.
-                                            const resolvePermission = (decision: string) => {
-                                              invoke('resolve_claude_permission', { sessionId: cs.sessionId, decision }).catch(() => {})
-                                              // Clear waiting state locally so popup disappears instantly
-                                              setClaudeSessions((prev) => prev.map((s) => (s.sessionId === cs.sessionId ? { ...s, status: 'processing', tool: undefined, toolInput: undefined } : s)))
-                                              // Collapse the panel
-                                              hoverExpandedRef.current = false
-                                              collapse()
-                                            }
-                                            // Codex approval should be made in Codex's own UI.
-                                            // cc-claw only surfaces a reminder and a jump action
-                                            // so the user can approve there.
-                                            if (cs.source === 'codex') {
-                                              return (
-                                                <>
-                                                  <button
-                                                    data-no-drag
-                                                    onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      invoke('jump_to_claude_terminal', { sessionId: cs.sessionId }).catch(() => {})
-                                                      hoverExpandedRef.current = false
-                                                      collapse()
-                                                    }}
-                                                    className="flex-1 py-1.5 rounded-md text-[12px] font-normal bg-[#27272a] text-slate-300 hover:bg-[#303033] transition-colors"
-                                                  >
-                                                    {t('mini.viewInCodex', '前往 Codex')}
-                                                  </button>
-                                                  <button
-                                                    data-no-drag
-                                                    onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      hoverExpandedRef.current = false
-                                                      collapse()
-                                                    }}
-                                                    className="flex-1 py-1.5 rounded-md text-[12px] font-normal bg-[#27272a] text-slate-300 hover:bg-[#303033] transition-colors"
-                                                  >
-                                                    {t('mini.later', '稍后处理')}
-                                                  </button>
-                                                </>
-                                              )
-                                            }
-
-                                            return (
-                                              <>
-                                                <button
-                                                  data-no-drag
-                                                  onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    resolvePermission('deny')
-                                                  }}
-                                                  className="flex-1 py-1.5 rounded-md text-[12px] font-normal bg-[#27272a] text-slate-300 hover:bg-[#303033] transition-colors"
-                                                >
-                                                  {t('mini.deny', '拒绝')}
-                                                </button>
-                                                <button
-                                                  data-no-drag
-                                                  onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    resolvePermission('allow_once')
-                                                  }}
-                                                  className="flex-1 py-1.5 rounded-md text-[12px] font-normal bg-[#27272a] text-slate-300 hover:bg-[#303033] transition-colors"
-                                                >
-                                                  {t('mini.allowOnce', '允许一次')}
-                                                </button>
-                                                <button
-                                                  data-no-drag
-                                                  onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    resolvePermission('allow_all')
-                                                  }}
-                                                  className="flex-1 py-1.5 rounded-md text-[12px] font-normal bg-emerald-900/50 text-emerald-300 hover:bg-emerald-800/50 transition-colors"
-                                                >
-                                                  {t('mini.allowAll', '全部允许')}
-                                                </button>
-                                                <button
-                                                  data-no-drag
-                                                  onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    resolvePermission('auto_approve')
-                                                  }}
-                                                  className="flex-1 py-1.5 rounded-md text-[12px] font-normal bg-rose-900/50 text-rose-300 hover:bg-rose-800/50 transition-colors"
-                                                >
-                                                  {t('mini.autoApprove', '自动批准')}
-                                                </button>
-                                              </>
-                                            )
-                                          })()}
-                                        </div>
-                                      </div>
-                                    )}
                                     {/* ── 完成提醒弹窗 (Completion Reminder) ──
                                        任务完成且终端未激活时，显示用户问题和 AI 回复预览，
                                        点击跳转到对应终端。
@@ -4977,7 +4795,6 @@ export default function Mini() {
                             setNativeDialogActive(false)
                           }}
                           petdexUrl={petdexUrl}
-                          petdexFailed={petdexFailed}
                         />
                       </div>
                     </div>
@@ -5095,42 +4912,6 @@ export default function Mini() {
                       />
                     </div>
                   )}
-                </div>
-                <div
-                  style={{
-                    background: '#1a1a1a',
-                    padding: '10px 14px',
-                    borderRadius: '0 0 12px 12px',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <span
-                    onClick={() => invoke('open_url', { url: 'https://github.com/yeshen112/cc-claw' })}
-                    style={{
-                      color: 'rgba(255,255,255,0.35)',
-                      fontSize: 11,
-                      cursor: 'pointer',
-                      transition: 'color 0.25s, transform 0.25s, letter-spacing 0.25s',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = '#f5c542'
-                      e.currentTarget.style.transform = 'scale(1.04)'
-                      e.currentTarget.style.letterSpacing = '0.3px'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = 'rgba(255,255,255,0.35)'
-                      e.currentTarget.style.transform = 'scale(1)'
-                      e.currentTarget.style.letterSpacing = '0px'
-                    }}
-                  >
-                    {t('mini.starPrompt')} <span style={{ fontSize: 13, lineHeight: 1 }}>⭐</span> {t('mini.starPromptSuffix')}
-                  </span>
                 </div>
               </div>
             </motion.div>

@@ -93,7 +93,7 @@ export const DEFAULT_PET_QUEUE_IDS: string[] = [
 // Maps Mini.tsx's `PetState` (idle/working/compacting/waiting) to a codex
 // sprite state. Walking direction and hover are layered on top of this by
 // the wrapper component, not by this function.
-export type MiniPetSourceState = 'idle' | 'working' | 'compacting' | 'waiting'
+export type MiniPetSourceState = 'idle' | 'working' | 'compacting' | 'waiting' | 'failed'
 
 export function petStateToCodexState(state: MiniPetSourceState): CodexPetState {
   switch (state) {
@@ -104,6 +104,8 @@ export function petStateToCodexState(state: MiniPetSourceState): CodexPetState {
       return 'running'
     case 'waiting':
       return 'waiting'
+    case 'failed':
+      return 'failed'
     default:
       return 'idle'
   }

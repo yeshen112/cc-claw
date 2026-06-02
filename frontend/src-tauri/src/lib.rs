@@ -6642,6 +6642,9 @@ pub struct ClaudeSession {
     /// Shown in the efficiency-mode completion reminder popup.
     #[serde(rename = "lastResponse", skip_serializing_if = "Option::is_none")]
     pub last_response: Option<String>,
+    /// Whether the most recent Stop event was an interruption / failure.
+    #[serde(rename = "isInterrupted")]
+    pub is_interrupted: bool,
     /// Whether this session's terminal tab is currently the active/focused tab.
     /// Set dynamically in `get_claude_sessions` — not persisted.
     #[serde(rename = "isActiveTab")]
@@ -7788,144 +7791,6 @@ async fn debug_log(scope: String, msg: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Spawn a demo-mode mini mascot window. Each window runs the bundled
-/// frontend with `?demo=1&pet=<id>` query params, which routes to a
-/// minimal mascot-only React tree. Used by the dev-mode "演示模式" toggle
-/// to drop multiple animated mascots on screen for demo recordings.
-#[tauri::command]
-async fn spawn_demo_mascot(app: tauri::AppHandle, pet_id: String) -> Result<String, String> {
-    use std::sync::atomic::AtomicU64;
-    static DEMO_COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = DEMO_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let label = format!("demo-mascot-{}", n);
-
-    let url = format!("index.html#/mini?demo=1&pet={}", pet_id);
-    let win = tauri::WebviewWindowBuilder::new(
-        &app,
-        label.clone(),
-        tauri::WebviewUrl::App(url.into()),
-    )
-    .title("cc-claw demo mascot")
-    .inner_size(96.0, 96.0)
-    .min_inner_size(96.0, 96.0)
-    .resizable(false)
-    .decorations(false)
-    .transparent(true)
-    .shadow(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .build()
-    .map_err(|e| e.to_string())?;
-
-    // Position the demo window in a known-good area near the top-right
-    // of the screen, stepping each subsequent spawn by one collapsed
-    // mascot width so they line up next to each other. Avoiding the
-    // main mini window's frame keeps us correct even when the user is
-    // currently in settings (where the main window is 600px wide and
-    // would otherwise push the demos off-screen).
-    const DEMO_STEP_W: f64 = 96.0;
-    #[cfg(target_os = "macos")]
-    {
-        let win_clone = win.clone();
-        let _ = app.run_on_main_thread(move || {
-            use objc2::msg_send;
-            use objc2::runtime::{AnyClass, AnyObject};
-            use objc2_foundation::{NSPoint, NSRect, NSSize};
-            if let Ok(demo_ns) = win_clone.ns_window() {
-                let demo_obj = unsafe { &*(demo_ns as *mut AnyObject) };
-
-                // Pull the active screen frame from NSScreen so we can
-                // anchor relative to the visible area rather than guessing.
-                let screen_frame: Option<NSRect> = unsafe {
-                    AnyClass::get(c"NSScreen").and_then(|cls| {
-                        let screens: *mut AnyObject = msg_send![cls, screens];
-                        if screens.is_null() {
-                            return None;
-                        }
-                        let count: usize = msg_send![&*screens, count];
-                        if count == 0 {
-                            return None;
-                        }
-                        let screen: *mut AnyObject = msg_send![&*screens, objectAtIndex: 0usize];
-                        if screen.is_null() {
-                            return None;
-                        }
-                        let frame: NSRect = msg_send![&*screen, frame];
-                        Some(frame)
-                    })
-                };
-                let Some(sf) = screen_frame else { return };
-
-                // Right-aligned baseline anchor: ~120pt below the menu
-                // bar on the right edge, then step left by one mascot
-                // width per spawn.
-                let baseline_x = sf.origin.x + sf.size.width - DEMO_STEP_W * 2.0;
-                let baseline_y = sf.origin.y + sf.size.height - DEMO_STEP_W - MASCOT_TOP_INSET;
-                let x = baseline_x - (n as f64) * DEMO_STEP_W;
-                let new_origin = NSPoint::new(x.max(sf.origin.x), baseline_y);
-                let new_frame = NSRect::new(new_origin, NSSize::new(DEMO_STEP_W, DEMO_STEP_W));
-
-                unsafe {
-                    let _: () = msg_send![demo_obj, setLevel: 27isize];
-                    let _: () = msg_send![demo_obj, setFrame: new_frame, display: true, animate: false];
-                    let behavior: usize = (1 << 0) | (1 << 4) | (1 << 8) | (1 << 6);
-                    let _: () = msg_send![demo_obj, setCollectionBehavior: behavior];
-                    let _: () = msg_send![demo_obj, setAcceptsMouseMovedEvents: true];
-                }
-            }
-        });
-    }
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(Some(monitor)) = win.current_monitor() {
-            let scale = monitor.scale_factor();
-            let mp = monitor.position();
-            let mx = mp.x as f64 / scale;
-            let my = mp.y as f64 / scale;
-            let sw = monitor.size().width as f64 / scale;
-            let baseline_x = mx + sw - DEMO_STEP_W * 2.0;
-            let baseline_y = my + MASCOT_TOP_INSET;
-            let x = (baseline_x - (n as f64) * DEMO_STEP_W).max(mx);
-            let _ = win.set_position(tauri::LogicalPosition::new(x, baseline_y));
-        }
-        let _ = win.set_always_on_top(true);
-    }
-    let _ = win.show();
-    Ok(label)
-}
-
-/// Close a single spawned demo mascot window by label.
-#[tauri::command]
-async fn close_demo_mascot(app: tauri::AppHandle, label: String) -> Result<bool, String> {
-    if !label.starts_with("demo-mascot-") {
-        return Err("invalid demo mascot label".into());
-    }
-    if let Some(win) = app.get_webview_window(&label) {
-        let _ = win.close();
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
-
-/// Close every spawned demo mascot window, leaving only the main mini.
-#[tauri::command]
-async fn close_demo_mascots(app: tauri::AppHandle) -> Result<u32, String> {
-    let mut closed = 0u32;
-    let labels: Vec<String> = app
-        .webview_windows()
-        .keys()
-        .filter(|l| l.starts_with("demo-mascot-"))
-        .cloned()
-        .collect();
-    for label in labels {
-        if let Some(win) = app.get_webview_window(&label) {
-            let _ = win.close();
-            closed += 1;
-        }
-    }
-    Ok(closed)
-}
 
 /// Open the platform's native folder picker so the user can choose a
 /// codex pet directory to import. Returns the absolute path or `null` if
@@ -10514,6 +10379,7 @@ fn process_claude_event(
                     pid: None,
                     pending_agents: 0,
                     last_response: None,
+                    is_interrupted: false,
                     is_active_tab: false,
                     source: source.clone(),
                     permission_suggestions: None,
@@ -10551,6 +10417,7 @@ fn process_claude_event(
                     // New user prompt = fresh start. Reset counter in case previous
                     // agents were killed or SubagentStop was never delivered.
                     session.pending_agents = 0;
+                    session.is_interrupted = false;
                 } else if (hook_event == "PreToolUse" && tool_name == "Agent") || raw_hook_event == "subagentStart" {
                     session.pending_agents += 1;
                     log::info!("[claude_event] session={} Agent launched, pending_agents={}",
@@ -10751,6 +10618,7 @@ fn process_claude_event(
                     } else {
                         false
                     };
+                    session.is_interrupted = interrupted;
                     if is_tab_active || interrupted {
                         session.last_response = None;
                     } else {
@@ -11990,9 +11858,11 @@ pub fn run() {
             // Windows: move window off-screen when a fullscreen app is on the SAME
             // monitor as the mini window.  We avoid hide()/show() because show()
             // triggers a focus event which causes the panel to expand.
+            // Controlled by the "hide_during_fullscreen" setting (default: true).
             #[cfg(target_os = "windows")]
             {
                 let app_handle = app.handle().clone();
+                let settings_dir = app.path().app_data_dir().ok();
                 std::thread::spawn(move || {
                     use windows::Win32::Graphics::Gdi::{HMONITOR, MonitorFromPoint, MONITOR_DEFAULTTONEAREST};
                     use windows::Win32::Foundation::POINT;
@@ -12000,14 +11870,20 @@ pub fn run() {
                     let mut was_hidden = false;
                     let mut saved_pos: Option<tauri::LogicalPosition<f64>> = None;
                     let mut hidden_monitor: Option<HMONITOR> = None;
-                    // Debounce counter: require several consecutive non-fullscreen
-                    // polls before restoring, so brief foreground changes (mouse
-                    // movement, overlay popups) during video playback don't cause
-                    // the pet to flicker.
                     let mut non_fs_streak: u32 = 0;
                     const RESTORE_THRESHOLD: u32 = 4; // 4 × 500ms = 2s
                     loop {
                         std::thread::sleep(std::time::Duration::from_millis(500));
+
+                        // Read "hide_during_fullscreen" setting (default: true).
+                        // Re-read every tick so the user can toggle without restarting.
+                        let hide_enabled = settings_dir.as_ref()
+                            .map(|d| d.join("settings.json"))
+                            .and_then(|p| std::fs::read_to_string(p).ok())
+                            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                            .and_then(|v| v.get("hide_during_fullscreen").and_then(|b| b.as_bool()))
+                            .unwrap_or(true);
+
                         let fs_monitor = fullscreen_foreground_monitor();
 
                         if let Some(win) = app_handle.get_webview_window("mini") {
@@ -12028,7 +11904,7 @@ pub fn run() {
                                 (Some(fs_mon), Some(mini_mon)) if mini_mon == fs_mon
                             );
 
-                            if same_monitor {
+                            if same_monitor && hide_enabled {
                                 non_fs_streak = 0;
                                 if !was_hidden {
                                     log::info!("[fullscreen] detected fullscreen app on same monitor, moving mini off-screen");
@@ -12156,7 +12032,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_status, send_chat, open_detail_panel, save_character_gif, delete_character_assets, delete_character_gif, get_agents, get_health, get_agent_metrics, interrupt_agent, scan_characters, get_agent_extra_info, open_mini, close_mini, set_mini_expanded, set_mini_size, set_efficiency_hover_tracking, resize_mini_height, move_mini_by, get_mini_origin, get_mini_monitor_rect, set_mini_origin, set_ime_mode, get_agent_sessions, get_session_preview, get_session_messages, get_active_sessions, proxy_post, play_sound, get_claude_sessions, get_claude_conversation, install_claude_hooks, install_cursor_hooks, remove_claude_session, resolve_claude_permission, get_claude_stats, open_url, activate_app, focus_cursor_terminal, check_ax_permission, request_ax_permission, jump_to_claude_terminal, close_ssh, read_local_file, list_backgrounds, save_background, get_background_data, exit_app, get_ssh_key_info, reset_ssh, get_ui_scale, list_custom_codex_pets, open_codex_pets_dir, import_codex_pet, pick_codex_pet_folder, reassert_floating, spawn_demo_mascot, close_demo_mascot, close_demo_mascots, debug_log, update_tray_language, set_pet_mode_window, set_pet_context_menu, set_pet_pomodoro_active, get_now_playing, get_system_idle_time])
+        .invoke_handler(tauri::generate_handler![get_status, send_chat, open_detail_panel, save_character_gif, delete_character_assets, delete_character_gif, get_agents, get_health, get_agent_metrics, interrupt_agent, scan_characters, get_agent_extra_info, open_mini, close_mini, set_mini_expanded, set_mini_size, set_efficiency_hover_tracking, resize_mini_height, move_mini_by, get_mini_origin, get_mini_monitor_rect, set_mini_origin, set_ime_mode, get_agent_sessions, get_session_preview, get_session_messages, get_active_sessions, proxy_post, play_sound, get_claude_sessions, get_claude_conversation, install_claude_hooks, install_cursor_hooks, remove_claude_session, resolve_claude_permission, get_claude_stats, open_url, activate_app, focus_cursor_terminal, check_ax_permission, request_ax_permission, jump_to_claude_terminal, close_ssh, read_local_file, list_backgrounds, save_background, get_background_data, exit_app, get_ssh_key_info, reset_ssh, get_ui_scale, list_custom_codex_pets, open_codex_pets_dir, import_codex_pet, pick_codex_pet_folder, reassert_floating, debug_log, update_tray_language, set_pet_mode_window, set_pet_context_menu, set_pet_pomodoro_active, get_now_playing, get_system_idle_time])
         .manage(ActiveAgentPid { pid: Mutex::new(None) })
         .manage(ClaudeState { sessions: Arc::new(Mutex::new(HashMap::new())), pending_permissions: Arc::new(Mutex::new(HashMap::new())) })
         .run(tauri::generate_context!())

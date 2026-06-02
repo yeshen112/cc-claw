@@ -55,7 +55,6 @@ interface PetPickerProps {
   // We deliberately never use a hardcoded URL so the user knows when
   // the link they're about to follow is stale or unavailable.
   petdexUrl?: string | null
-  petdexFailed?: boolean
 }
 const CODEX_PETS_PATH_HINT = '~/.codex/pets'
 
@@ -81,7 +80,6 @@ export function PetPicker({
   onNativeDialogStart,
   onNativeDialogEnd,
   petdexUrl,
-  petdexFailed,
 }: PetPickerProps) {
   // Validate one more time before trusting the URL — the parent
   // already validates but a defensive check keeps a malformed string
@@ -380,13 +378,6 @@ export function PetPicker({
         </div>
       )}
 
-      {showQueue && import.meta.env.DEV && (
-        <DemoMascotControls
-          allPets={allPets}
-          onNativeDialogStart={onNativeDialogStart}
-          onNativeDialogEnd={onNativeDialogEnd}
-        />
-      )}
 
       <div ref={createSectionRef} className="bg-[#0f0f0f] rounded-2xl border border-white/5 overflow-hidden">
         <button
@@ -414,7 +405,7 @@ export function PetPicker({
                 </div>
                 <ExternalLink className="w-4 h-4 text-white/40 shrink-0" strokeWidth={2.5} />
               </button>
-            ) : petdexFailed ? (
+            ) : false ? (
               <div className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.04] border border-rose-500/20">
                 <CreateStepBadge n={1} />
                 <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
@@ -547,194 +538,6 @@ function PetRow({ pet, selected, onSelect }: PetRowProps) {
       >
         {selected ? '已选' : '选择'}
       </button>
-    </div>
-  )
-}
-
-// Dev-mode demo controls. Behind a toggle so the section collapses for
-// non-demo use. When enabled, users add mascots one at a time (mirroring
-// the AGENT 队列 row pattern). Each row tracks its Tauri window label
-// so the × button can close just that window. Toggling off closes all
-// remaining demo windows and clears the list.
-interface DemoEntry {
-  label: string
-  petId: string
-}
-
-function DemoMascotControls({
-  allPets,
-  onNativeDialogStart,
-  onNativeDialogEnd,
-}: {
-  allPets: CodexPet[]
-  onNativeDialogStart?: () => void
-  onNativeDialogEnd?: () => void
-}) {
-  const [enabled, setEnabled] = useState(false)
-  const [entries, setEntries] = useState<DemoEntry[]>([])
-  const [addOpen, setAddOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const findPet = useCallback(
-    (id: string) => allPets.find((p) => p.id === id) ?? null,
-    [allPets],
-  )
-
-  const handlePick = useCallback(
-    async (petId: string) => {
-      if (busy) return
-      setBusy(true)
-      // Spawning a Tauri window briefly steals focus from the main mini
-      // window. Without the suppression flag, the settings panel's
-      // blur/click-outside handlers would close themselves before the
-      // user even sees the new mascot.
-      onNativeDialogStart?.()
-      try {
-        const label = (await invoke('spawn_demo_mascot', { petId })) as string
-        setEntries((prev) => [...prev, { label, petId }])
-      } catch (e) {
-        console.warn('[demo] spawn failed:', e)
-      } finally {
-        setBusy(false)
-        setAddOpen(false)
-        setTimeout(() => onNativeDialogEnd?.(), 600)
-      }
-    },
-    [busy, onNativeDialogStart, onNativeDialogEnd],
-  )
-
-  const handleRemove = useCallback(async (label: string) => {
-    setEntries((prev) => prev.filter((e) => e.label !== label))
-    try {
-      await invoke('close_demo_mascot', { label })
-    } catch (e) {
-      console.warn('[demo] close failed:', e)
-    }
-  }, [])
-
-  const handleToggle = useCallback(async () => {
-    const next = !enabled
-    setEnabled(next)
-    if (!next) {
-      setAddOpen(false)
-      if (entries.length > 0) {
-        setEntries([])
-        try {
-          await invoke('close_demo_mascots')
-        } catch (e) {
-          console.warn('[demo] close-all failed:', e)
-        }
-      }
-    }
-  }, [enabled, entries.length])
-
-  return (
-    <div className="bg-[#0f0f0f] rounded-2xl border border-white/5 overflow-hidden">
-      <div className="px-5 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-3.5 h-3.5 text-white/40" strokeWidth={2} />
-          <span className="text-xs font-bold text-white/30 uppercase tracking-widest">
-            演示模式
-          </span>
-          <span className="text-[11px] text-white/30">独立窗口，状态共享</span>
-        </div>
-        <button
-          data-no-drag
-          onClick={handleToggle}
-          aria-pressed={enabled}
-          className={`relative inline-flex items-center transition-colors rounded-full ${
-            enabled ? 'bg-emerald-500/70' : 'bg-white/[0.08]'
-          }`}
-          style={{ width: 36, height: 20, padding: 2 }}
-        >
-          <span
-            className="bg-white rounded-full shadow-sm transition-transform"
-            style={{
-              width: 16,
-              height: 16,
-              transform: enabled ? 'translateX(16px)' : 'translateX(0px)',
-            }}
-          />
-        </button>
-      </div>
-      {enabled && (
-        <div className="border-t border-white/5 p-3 space-y-2">
-          {entries.length === 0 ? (
-            <div className="text-[11px] text-white/30 px-1 py-1.5">
-              点 "添加看板娘" 在屏幕上多挂一个，可以单独拖动
-            </div>
-          ) : (
-            entries.map((entry, i) => {
-              const meta = findPet(entry.petId)
-              return (
-                <div
-                  key={entry.label}
-                  className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.04] border border-white/5"
-                >
-                  <span className="text-[11px] text-white/30 w-5 text-center shrink-0">
-                    {i + 1}
-                  </span>
-                  <div
-                    className="shrink-0 rounded-md bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center"
-                    style={{ width: 32, height: 32 }}
-                  >
-                    {meta ? (
-                      <SpritePet pet={meta} state="idle" size={32} />
-                    ) : (
-                      <span className="text-[10px] text-white/30">?</span>
-                    )}
-                  </div>
-                  <span className="text-sm text-white/80 truncate flex-1">
-                    {meta?.displayName ?? entry.petId}
-                  </span>
-                  <button
-                    data-no-drag
-                    onClick={() => handleRemove(entry.label)}
-                    className="w-6 h-6 flex items-center justify-center rounded text-white/40 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                  >
-                    <XIcon className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )
-            })
-          )}
-          <button
-            data-no-drag
-            onClick={() => setAddOpen((v) => !v)}
-            disabled={busy}
-            className="flex items-center gap-2 w-full p-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 hover:bg-white/[0.02] disabled:opacity-60 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">添加看板娘</span>
-          </button>
-          {addOpen && (
-            <div className="rounded-xl border border-white/10 bg-black/30 p-3 max-h-[260px] overflow-y-auto scrollbar-hidden">
-              <div className="text-[11px] text-white/30 mb-2 px-1">点击宠物在屏幕上多挂一个</div>
-              <div className="grid grid-cols-2 gap-2">
-                {allPets.map((pet) => (
-                  <button
-                    data-no-drag
-                    key={pet.id}
-                    disabled={busy}
-                    onClick={() => handlePick(pet.id)}
-                    className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-transparent hover:border-white/10 transition-colors disabled:opacity-60"
-                  >
-                    <div
-                      className="shrink-0 rounded-md bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center"
-                      style={{ width: 28, height: 28 }}
-                    >
-                      <SpritePet pet={pet} state="idle" size={28} />
-                    </div>
-                    <span className="text-xs text-white/75 truncate flex-1 text-left">
-                      {pet.displayName}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
