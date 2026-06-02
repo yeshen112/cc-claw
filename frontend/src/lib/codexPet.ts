@@ -88,15 +88,6 @@ export const DEFAULT_PET_ID = 'phoebe'
 // manifest order, capped at 10 entries.
 export const DEFAULT_PET_QUEUE_IDS: string[] = [
   'phoebe',
-  'doro',
-  'elaina',
-  'homie',
-  'linnea',
-  'mambo',
-  'naruto',
-  'nezuko',
-  'skirk',
-  'taffy',
 ]
 
 // Maps Mini.tsx's `PetState` (idle/working/compacting/waiting) to a codex

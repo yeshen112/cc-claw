@@ -7,13 +7,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import ReactMarkdown from 'react-markdown'
 import { useTranslation } from 'react-i18next'
 import { SettingsTab } from './components/SettingsTab'
-import { UpdateModal, type UpdateModalInfo, type UpdateModalPhase } from './components/UpdateModal'
-import { AgentDetailView } from './components/AgentDetailView'
 import { CreateCharacterModal } from './components/CreateCharacterModal'
-import { ClaudeStatsView } from './components/ClaudeStatsView'
-import { getStore, DEFAULT_CHAR, DEFAULT_CHAR_NAME, loadCharacters, loadOcConnections, saveOcConnections } from './lib/store'
-import type { AgentMetrics, OcConnection } from './lib/types'
-import { OnboardingModal } from './components/OnboardingModal'
+import { getStore, DEFAULT_CHAR, DEFAULT_CHAR_NAME, loadCharacters } from './lib/store'
 import { PetContextMenu, PomodoroOverlay } from './components/PetContextMenu'
 import {
   type AppMode, type PetData, type PetAction, type PomodoroState,
@@ -318,18 +313,6 @@ function getAlternateLargeVideoUrl(url: string): string | undefined {
   return undefined
 }
 
-
-type OcParams = { mode?: string; url?: string; token?: string; sshHost?: string; sshUser?: string }
-
-// Returns null for incomplete remote connections (missing host/user)
-// so callers can skip them instead of accidentally treating them as local.
-function connToOcParams(conn: OcConnection): OcParams | null {
-  if (conn.type === 'remote') {
-    if (conn.host && conn.user) return { mode: 'remote', sshHost: conn.host, sshUser: conn.user }
-    return null // incomplete remote — skip
-  }
-  return {} // local
-}
 
 export default function Mini() {
   const [expanded, setExpanded] = useState(false)
@@ -705,15 +688,37 @@ export default function Mini() {
   }
 
   const { t, i18n } = useTranslation()
-  const [updateModalOpen, setUpdateModalOpen] = useState(false)
+  // ─── Stub types (UpdateModal removed) ───
+type UpdateModalInfo = { hasUpdate?: boolean; latest?: string; url?: string }
+type UpdateModalPhase = 'available' | 'downloading' | 'ready_to_restart'
+interface UpdateProgressPayload { stage?: string; progress?: number | null }
+type OcConnection = { id: string; type: 'local' | 'remote'; host?: string; user?: string }
+type AgentMetrics = Record<string, unknown>
+const loadOcConnections = async (): Promise<OcConnection[]> => []
+const saveOcConnections = async (_: OcConnection[]) => {}
+  // ─── Update modal stubs (always closed) ───
+  const updateModalOpen = false
   const updateModalOpenRef = useRef(false)
   const pendingUpdateInfoRef = useRef<UpdateModalInfo | null>(null)
   const updateModalRunOwnedRef = useRef(false)
-  const [updateModalPhase, setUpdateModalPhase] = useState<UpdateModalPhase>('available')
-  const [updateModalInfo, setUpdateModalInfo] = useState<UpdateModalInfo | null>(null)
-  const [updateModalProgress, setUpdateModalProgress] = useState<number | null>(null)
-  const [updateModalProgressStage, setUpdateModalProgressStage] = useState('preparing')
-  // Server-driven UI config (latest.json `ui` block). The codex pet hub
+  const updateModalPhase: UpdateModalPhase = 'available'
+  const updateModalInfo: UpdateModalInfo | null = null
+  const updateModalProgress: number | null = null
+  const updateModalProgressStage = 'preparing'
+  const updateModalWindowAdjustedRef = useRef(false)
+  const updateModalPrevExpandedRef = useRef(false)
+  const setUpdateModalOpen = (_v: boolean) => {}
+  const setUpdateModalPhase = (_v: UpdateModalPhase) => {}
+  const setUpdateModalInfo = (_v: UpdateModalInfo | null) => {}
+  const setUpdateModalProgress = (_v: number | null) => {}
+  const setUpdateModalProgressStage = (_v: string) => {}
+  const ensureUpdateModalWindow = async () => {}
+  const restoreWindowAfterUpdateModal = async () => {}
+  const openAvailableUpdateModal = async (_info: UpdateModalInfo) => {}
+  const closeUpdateModal = () => {}
+  const skipCurrentUpdateVersion = async () => {}
+  const runUpdateFromModal = async () => {}
+  const restartFromModal = () => {}
   // URL is sourced from `ui.petdex.url`. We deliberately do NOT fall
   // back to a hardcoded value — when the fetch fails or the field is
   // missing, PetPicker shows a "network error" message so users
@@ -1555,64 +1560,44 @@ export default function Mini() {
       largeMascotScaleRef.current = initialLargeMascotScale
 
       const existingModeVersion = await loadAppModeVersion()
-      // Force re-onboarding when the stored version is missing or older
-      // than APP_MODE_ONBOARDING_VERSION (e.g. after we ship changes that
-      // require users to re-confirm their mode choice).
-      const onboardingStale = isAppModeOnboardingStale(existingModeVersion)
-      if (!onboardingStale && (existingMode === 'pet' || existingMode === 'coding')) {
-        setAppMode(existingMode)
-        appModeRef.current = existingMode
-        setShowOnboarding(false)
-        if (existingMode === 'pet') {
-          const data = await loadPetData()
-          const ticked = tickPetData(data)
-          setPetData(ticked)
-          petDataRef.current = ticked
-          await savePetData(ticked)
-          // Keep persisted setting aligned with pet mode for next startup.
-          await store.set('large_mascot', true)
-        }
-        await invoke('set_mini_expanded', {
-          expanded: false,
-          position: initialMascotPosition,
-          efficiency: true,
+      // Always default to coding mode (hybrid: CC monitoring + desktop pet).
+      // No onboarding modal — just go straight to the pet view.
+      const mode = (existingMode === 'pet' || existingMode === 'coding') ? existingMode : 'coding'
+      setAppMode(mode)
+      appModeRef.current = mode
+      setShowOnboarding(false)
+      void (async () => {
+        await saveAppMode(mode)
+        await saveAppModeVersion(APP_MODE_ONBOARDING_VERSION)
+      })()
+      if (mode === 'pet') {
+        const data = await loadPetData()
+        const ticked = tickPetData(data)
+        setPetData(ticked)
+        petDataRef.current = ticked
+        await savePetData(ticked)
+        await store.set('large_mascot', true)
+      }
+      await invoke('set_mini_expanded', {
+        expanded: false,
+        position: initialMascotPosition,
+        efficiency: true,
+        mascotScale: initialMascotScale,
+        largeMascot: mode === 'pet' ? true : initialLargeMascot,
+        largeMascotScale: initialLargeMascotScale,
+      }).catch(() => {})
+      if (mode === 'pet') {
+        await invoke('set_pet_mode_window', {
+          active: true,
           mascotScale: initialMascotScale,
-          largeMascot: existingMode === 'pet' ? true : initialLargeMascot,
           largeMascotScale: initialLargeMascotScale,
         }).catch(() => {})
-        if (existingMode === 'pet') {
-          await invoke('set_pet_mode_window', {
-            active: true,
-            mascotScale: initialMascotScale,
-            largeMascotScale: initialLargeMascotScale,
-          }).catch(() => {})
-        } else {
-          invoke('set_pet_mode_window', {
-            active: false,
-            mascotScale: initialMascotScale,
-            largeMascotScale: initialLargeMascotScale,
-          }).catch(() => {})
-        }
       } else {
-        // First launch (or mode not chosen yet): show mode onboarding.
-        setAppMode(null)
-        appModeRef.current = null
-        try {
-          await invoke('set_mini_size', {
-            restore: false,
-            position: initialMascotPosition,
-            keepOnTop: true,
-            mascotScale: initialMascotScale,
-          })
-        } catch {}
-        // `set_mini_size` schedules its NSWindow resize on the main thread
-        // and returns immediately, so the modal would otherwise render
-        // inside the still-collapsed 96x96 frame and clip its own
-        // contents (clicks effectively land outside the visible area).
-        // A short delay lets the resize land before React mounts the
-        // modal at a sane size.
-        await new Promise<void>((r) => setTimeout(r, 120))
-        setShowOnboarding(true)
+        invoke('set_pet_mode_window', {
+          active: false,
+          mascotScale: initialMascotScale,
+          largeMascotScale: initialLargeMascotScale,
+        }).catch(() => {})
       }
 
       await store.set('view_mode', 'efficiency')
@@ -1625,9 +1610,7 @@ export default function Mini() {
   }, [])
 
   const fetchAgents = useCallback(async () => {
-    // Skip polling while settings page is open — snapshot comparison would
-    // detect the config change prematurely, consuming it before the user exits
-    // settings, which means exitSettings' call wouldn't show the loading overlay.
+    // Skip polling while settings page is open.
     if (settingsModeRef.current) return
 
     try {
@@ -1640,70 +1623,7 @@ export default function Mini() {
     } catch (e) {
       console.warn('[fetchAgents] loadCharacters failed:', e)
     }
-    try {
-      const store = await load('settings.json', { defaults: {}, autoSave: true })
-      const connections = await loadOcConnections()
-      setHasConfiguredOpenClaw(connections.some((conn) => connToOcParams(conn) !== null))
-
-      // Detect connection config changes — show loading overlay if changed
-      const snapshot = JSON.stringify(connections.map((c) => ({ id: c.id, type: c.type, host: c.host, user: c.user })))
-      const configChanged = lastConnSnapshotRef.current !== '' && snapshot !== lastConnSnapshotRef.current
-      lastConnSnapshotRef.current = snapshot
-      if (configChanged) {
-        setAgents([])
-        setAllSessions([])
-        setRefreshingAgents(true)
-        if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current)
-        refreshTimeoutRef.current = setTimeout(() => setRefreshingAgents(false), 45000)
-      }
-
-      const newConnMap = new Map<string, OcParams>()
-      const newRealIdMap = new Map<string, string>()
-      const newSourceLabels: Record<string, string> = {}
-      const allAgents: AgentInfo[] = []
-      const multi = connections.length > 1
-      await Promise.all(
-        connections.map(async (conn) => {
-          try {
-            const oc = connToOcParams(conn)
-            if (!oc) return // skip incomplete remote connections
-            const agents = (await invoke('get_agents', oc)) as AgentInfo[]
-            const prefix = multi ? `${conn.id.slice(0, 8)}:` : ''
-            const label = conn.type === 'local' ? t('mini.local') : conn.host || t('mini.remote')
-            for (const a of agents) {
-              const qualifiedId = prefix + a.id
-              newConnMap.set(qualifiedId, oc)
-              newRealIdMap.set(qualifiedId, a.id)
-              if (multi) newSourceLabels[qualifiedId] = label
-              allAgents.push({ ...a, id: qualifiedId })
-            }
-          } catch (e) {
-            console.warn('[fetchAgents] connection failed:', conn.id, e)
-          }
-        }),
-      )
-
-      agentConnMapRef.current = newConnMap
-      agentRealIdMapRef.current = newRealIdMap
-      setAgentSourceLabels(newSourceLabels)
-      const charMap = (await store.get('agent_char_map')) as Record<string, string> | null
-      setAgents(allAgents)
-      setAgentCharMap(charMap || {})
-      // Clear loading overlay — data is now fresh
-      setRefreshingAgents(false)
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current)
-        refreshTimeoutRef.current = null
-      }
-    } catch (e) {
-      console.warn('[fetchAgents] get_agents failed:', e)
-      setRefreshingAgents(false)
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current)
-        refreshTimeoutRef.current = null
-      }
-    }
-  }, [loadMiniChar, t])
+  }, [loadMiniChar])
 
   const playDefaultSound = useCallback(() => {
     if (navigator.userAgent.includes('Windows')) {
@@ -1713,304 +1633,14 @@ export default function Mini() {
     }
   }, [])
 
-  const lastOcSoundRef = useRef(0)
-  const playOcCompletionSound = useCallback((source: string) => {
-    console.log('[OC-SOUND] triggered from', source, 'soundEnabled:', soundEnabledRef.current)
-    if (!soundEnabledRef.current) return
-    const now = Date.now()
-    if (now - lastOcSoundRef.current < 5000) {
-      console.log('[OC-SOUND] deduped, last played', now - lastOcSoundRef.current, 'ms ago')
-      return
-    }
-    lastOcSoundRef.current = now
-    console.log('[OC-SOUND] PLAYING sound:', notifySoundRef.current)
-    if (notifySoundRef.current === 'manbo') {
-      new Audio('/audio/manbo.m4a').play().catch(() => {})
-    } else {
-      playDefaultSound()
-    }
-  }, [])
-
-  const prevHealthRef = useRef<Record<string, boolean>>({})
-  const prevSessionHealthRef = useRef<Record<string, boolean>>({})
-  // Prevent concurrent pollHealth calls — if a remote SSH call takes > 1s,
-  // the 1s interval would stack requests, overwhelming the SSH socket and
-  // causing repeated "stale socket" failures.
-  const pollHealthBusyRef = useRef(false)
-  const pollHealth = useCallback(async () => {
-    if (pollHealthBusyRef.current) return
-    pollHealthBusyRef.current = true
-    try {
-      const connections = await loadOcConnections()
-      // Start with previous data — only overwrite for connections that succeed
-      const hMap: Record<string, boolean> = { ...prevHealthRef.current }
-      const sMap: Record<string, boolean> = { ...prevSessionHealthRef.current }
-      const freshKeys = new Set<string>() // session keys that got fresh data this round
-      await Promise.all(
-        connections.map(async (conn) => {
-          const prefix = connections.length > 1 ? `${conn.id.slice(0, 8)}:` : ''
-          try {
-            const oc = connToOcParams(conn)
-            if (!oc) {
-              // Incomplete remote connection — still clear stale health data for
-              // this prefix so the mascot/status doesn't stay "busy" from the
-              // previous (now-removed) connection's data.
-              for (const k of Object.keys(hMap)) {
-                if (prefix === '' || k.startsWith(prefix)) delete hMap[k]
-              }
-              for (const k of Object.keys(sMap)) {
-                if (prefix === '' || k.startsWith(prefix)) delete sMap[k]
-              }
-              return
-            }
-            const health = (await invoke('get_health', oc)) as { agents: AgentHealth[]; gatewayAlive?: boolean }
-            // Gateway dead (local OpenClaw process not running) — remove this
-            // connection from settings so the character cleanly goes idle instead
-            // of flickering between stale "working" and "idle" states.
-            if (health.gatewayAlive === false) {
-              console.warn('[pollHealth] gateway dead, removing connection:', conn.id)
-              const remaining = connections.filter((c) => c.id !== conn.id)
-              saveOcConnections(remaining)
-              for (const k of Object.keys(hMap)) {
-                if (prefix === '' || k.startsWith(prefix)) delete hMap[k]
-              }
-              for (const k of Object.keys(sMap)) {
-                if (prefix === '' || k.startsWith(prefix)) delete sMap[k]
-              }
-              return
-            }
-            // Clear old entries for this connection, then fill fresh data
-            for (const k of Object.keys(hMap)) {
-              if (prefix === '' || k.startsWith(prefix)) delete hMap[k]
-            }
-            for (const k of Object.keys(sMap)) {
-              if (prefix === '' || k.startsWith(prefix)) delete sMap[k]
-            }
-            health.agents.forEach((a) => {
-              hMap[prefix + a.agentId] = a.active
-              if (a.sessions) {
-                a.sessions.forEach((s) => {
-                  const sk = `${prefix}${a.agentId}:${s.key}`
-                  sMap[sk] = s.active
-                  freshKeys.add(sk)
-                })
-              }
-            })
-          } catch {
-            /* SSH/invoke failed — previous data preserved */
-          }
-        }),
-      )
-
-      // Detect session active→inactive transitions (only for fresh data)
-      // Skip sub-agent sessions — their key contains ":subagent:" (from OpenClaw session key format)
-      const prev = prevSessionHealthRef.current
-      if (freshKeys.size > 0) {
-        const anyBecameInactive = Array.from(freshKeys).some((k) => prev[k] === true && sMap[k] === false && !k.includes(':subagent:'))
-        if (anyBecameInactive) {
-          console.log('[pollHealth] session became inactive, prev:', prev, 'curr:', sMap)
-          playOcCompletionSound('pollHealth')
-        }
-      }
-      prevSessionHealthRef.current = sMap
-
-      const anyActive = Object.values(sMap).some((v) => v)
-      setAnySessionActive(anyActive)
-
-      prevHealthRef.current = hMap
-      setHealthMap(hMap)
-    } catch {
-      /* ignore */
-    }
-    pollHealthBusyRef.current = false
-  }, [playOcCompletionSound])
-
-  const previewCacheRef = useRef<Map<string, { active: boolean; lastUserMsg?: string; lastAssistantMsg?: string; fetchedAt: number }>>(new Map())
-  const previewQueueRef = useRef<string[]>([])
-  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const sessionFileMapRef = useRef<Map<string, string>>(new Map())
-  const sessionAgentMapRef = useRef<Map<string, string>>(new Map()) // sessionCompositeKey → qualifiedAgentId
-  const fetchingSessionsRef = useRef(false)
-
-  const fetchAllSessions = useCallback(async () => {
-    if (agents.length === 0) {
-      setAllSessions([])
-      return
-    }
-    if (fetchingSessionsRef.current) return
-    fetchingSessionsRef.current = true
-    const results: MiniSessionInfo[] = []
-    await Promise.all(
-      agents.map(async (agent) => {
-        try {
-          const oc = agentConnMapRef.current.get(agent.id) || {}
-          const realId = agentRealIdMapRef.current.get(agent.id) || agent.id
-          const s = (await invoke('get_agent_sessions', { agentId: realId, ...oc })) as MiniSessionInfo[]
-          // Tag sessions with the qualified agent ID
-          results.push(...s.map((ss) => ({ ...ss, agentId: agent.id })))
-        } catch {
-          /* ignore */
-        }
-      }),
-    )
-    console.log('[fetchAllSessions] raw results:', results.length, results)
-    // Keep previous data if all fetches failed (SSH backoff etc.)
-    if (results.length === 0 && previewCacheRef.current.size > 0) {
-      console.log('[fetchAllSessions] empty results, keeping cache')
-      fetchingSessionsRef.current = false
-      return
-    }
-    const seen = new Set<string>()
-    const deduped = results.filter((s) => {
-      const k = `${s.agentId}:${s.key}`
-      if (seen.has(k)) return false
-      seen.add(k)
-      return true
-    })
-    const filtered = deduped.filter((s) => {
-      const key = `${s.agentId}:${s.key}`
-      const dismissedAt = dismissedSessionsRef.current.get(key)
-      if (dismissedAt !== undefined && s.updatedAt > dismissedAt) {
-        dismissedSessionsRef.current.delete(key)
-      }
-      return !dismissedSessionsRef.current.has(key)
-    })
-    filtered.sort((a, b) => b.updatedAt - a.updatedAt)
-    const top = filtered.slice(0, MAX_SLOTS)
-
-    // Merge cached preview data into sessions
-    const merged = top
-      .map((s) => {
-        const k = `${s.agentId}:${s.key}`
-        const cached = previewCacheRef.current.get(k)
-        if (cached) {
-          return { ...s, active: cached.active, lastUserMsg: cached.lastUserMsg, lastAssistantMsg: cached.lastAssistantMsg }
-        }
-        return s
-      })
-      // Filter out OpenClaw sub-agent sessions (key contains ":subagent:")
-      .filter((s) => !s.key.includes(':subagent:'))
-    merged.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || b.updatedAt - a.updatedAt)
-    console.log('[fetchAllSessions] final merged:', merged.length, merged)
-    setAllSessions(merged)
-
-    // Build session file lookup and queue preview fetches
-    const queue: string[] = []
-    for (const s of top) {
-      const k = `${s.agentId}:${s.key}`
-      if (s.sessionFile) sessionFileMapRef.current.set(k, s.sessionFile)
-      sessionAgentMapRef.current.set(k, s.agentId)
-      const cached = previewCacheRef.current.get(k)
-      const staleTime = cached?.active ? 8000 : 15000 // poll active sessions faster
-      const stale = !cached || Date.now() - cached.fetchedAt > staleTime
-      if (stale) queue.push(k)
-    }
-    // Prioritize active sessions first
-    queue.sort((a, b) => {
-      const ca = previewCacheRef.current.get(a)
-      const cb = previewCacheRef.current.get(b)
-      return (cb?.active ? 1 : 0) - (ca?.active ? 1 : 0)
-    })
-    previewQueueRef.current = queue
-    fetchingSessionsRef.current = false
-  }, [agents])
-
+  // ─── Character + config polling ───
   useEffect(() => {
     if (appMode !== 'coding') return
     fetchAgents()
-    pollHealth()
     const a = setInterval(fetchAgents, 5000)
-    const h = setInterval(pollHealth, 1000)
-    return () => {
-      clearInterval(a)
-      clearInterval(h)
-    }
-  }, [fetchAgents, pollHealth, appMode])
+    return () => clearInterval(a)
+  }, [fetchAgents, appMode])
 
-  // Update allSessions active states from pollHealth session data
-  const syncSessionActiveStates = useCallback(() => {
-    const sMap = prevSessionHealthRef.current
-    if (Object.keys(sMap).length === 0) return
-    setAllSessions((prev) => {
-      let changed = false
-      const updated = prev.map((s) => {
-        const key = `${s.agentId}:${s.key}`
-        const isActive = !!sMap[key]
-        if (s.active !== isActive) {
-          changed = true
-          return { ...s, active: isActive }
-        }
-        return s
-      })
-      if (!changed) return prev
-      updated.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || b.updatedAt - a.updatedAt)
-      return updated
-    })
-  }, [])
-
-  useEffect(() => {
-    syncSessionActiveStates()
-    const t = setInterval(syncSessionActiveStates, 2000)
-    return () => clearInterval(t)
-  }, [syncSessionActiveStates])
-
-  const drainPreviewQueue = useCallback(async () => {
-    if (previewTimerRef.current) {
-      clearTimeout(previewTimerRef.current)
-      previewTimerRef.current = null
-    }
-    const queue = [...previewQueueRef.current]
-    if (queue.length === 0) return
-    const processNext = (idx: number) => {
-      if (idx >= queue.length) return
-      const k = queue[idx]
-      const sessionFile = sessionFileMapRef.current.get(k)
-      if (!sessionFile) {
-        console.warn('[drainPreview] no sessionFile for', k, 'map size:', sessionFileMapRef.current.size)
-        previewTimerRef.current = setTimeout(() => processNext(idx + 1), 200)
-        return
-      }
-      const agentId = sessionAgentMapRef.current.get(k) || k.split(':')[0]
-      const oc = agentConnMapRef.current.get(agentId) || {}
-      invoke('get_session_preview', { sessionFile, ...oc })
-        .then((preview) => {
-          const p = preview as SessionPreview
-          previewCacheRef.current.set(k, { ...p, fetchedAt: Date.now() })
-          setAllSessions((prev) =>
-            prev.map((s) => {
-              if (`${s.agentId}:${s.key}` === k) {
-                return { ...s, active: p.active, lastUserMsg: p.lastUserMsg, lastAssistantMsg: p.lastAssistantMsg }
-              }
-              return s
-            }),
-          )
-        })
-        .catch(() => {
-          /* ignore */
-        })
-        .finally(() => {
-          if (idx + 1 < queue.length) {
-            previewTimerRef.current = setTimeout(() => processNext(idx + 1), 1500)
-          }
-        })
-    }
-    processNext(0)
-  }, [playOcCompletionSound])
-
-  useEffect(() => {
-    if (!expanded || appMode !== 'coding') return
-    fetchAllSessions().then(() => drainPreviewQueue())
-    const t1 = setInterval(() => {
-      fetchAllSessions().then(() => drainPreviewQueue())
-    }, 5000)
-    return () => {
-      clearInterval(t1)
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current)
-        previewTimerRef.current = null
-      }
-    }
-  }, [expanded, fetchAllSessions, drainPreviewQueue, appMode])
 
   // Load feature toggles
   useEffect(() => {
@@ -2114,7 +1744,7 @@ export default function Mini() {
     // Track which sessions already had lastResponse so we only auto-expand once.
     const seenCompletions = new Set<string>()
     // Track previously logged session statuses so we only emit a backend log
-    // line when something actually changes — keeps oc-claw.log readable.
+    // line when something actually changes — keeps cc-claw.log readable.
     const lastLoggedStatus = new Map<string, string>()
     const poll = async () => {
       try {
@@ -2249,31 +1879,6 @@ export default function Mini() {
     }
   }, [enableClaudeCode, enableClaudeDesktop, enableCodex, enableCursor, appMode])
 
-  // Fetch OpenClaw session messages when selected
-  useEffect(() => {
-    if (!selectedSessionKey) {
-      setSessionMessages([])
-      return
-    }
-    let cancelled = false
-    const fetchMsgs = async () => {
-      try {
-        const oc = agentConnMapRef.current.get(selectedSessionKey.agentId) || {}
-        const realId = agentRealIdMapRef.current.get(selectedSessionKey.agentId) || selectedSessionKey.agentId
-        const msgs = (await invoke('get_session_messages', { agentId: realId, sessionKey: selectedSessionKey.key, ...oc })) as any[]
-        if (!cancelled) setSessionMessages(msgs)
-      } catch {
-        if (!cancelled) setSessionMessages([])
-      }
-    }
-    fetchMsgs()
-    const t = setInterval(fetchMsgs, 3000)
-    return () => {
-      cancelled = true
-      clearInterval(t)
-    }
-  }, [selectedSessionKey])
-
   // Fetch Claude conversation when selected
   useEffect(() => {
     if (!selectedClaudeSession) {
@@ -2297,46 +1902,8 @@ export default function Mini() {
     }
   }, [selectedClaudeSession])
 
-  // Fetch agent metrics when selected
-  useEffect(() => {
-    if (!selectedAgentId) {
-      setMetrics(null)
-      setExtraInfo(null)
-      return
-    }
-    let cancelled = false
-    const realId = agentRealIdMapRef.current.get(selectedAgentId) || selectedAgentId
-    const fetchMetrics = async () => {
-      try {
-        const oc = agentConnMapRef.current.get(selectedAgentId) || {}
-        const m = (await invoke('get_agent_metrics', { agentId: realId, ...oc })) as AgentMetrics
-        if (!cancelled) setMetrics(m)
-      } catch {
-        if (!cancelled) setMetrics(null)
-      }
-    }
-    const fetchExtra = async () => {
-      const oc = agentConnMapRef.current.get(selectedAgentId) || {}
-      try {
-        const e = (await invoke('get_agent_extra_info', { agentId: realId, ...oc })) as any
-        if (!cancelled) setExtraInfo(e)
-      } catch {
-        if (!cancelled) setExtraInfo(null)
-      }
-    }
-    fetchMetrics()
-    fetchExtra()
-    const i1 = setInterval(fetchMetrics, 2000)
-    const i2 = setInterval(fetchExtra, 10000)
-    return () => {
-      cancelled = true
-      clearInterval(i1)
-      clearInterval(i2)
-    }
-  }, [selectedAgentId])
-
-  // Build character slots (OpenClaw + Claude Code)
-  const ocSlots: SessionSlot[] = allSessions.slice(0, MAX_SLOTS).map((s, i) => {
+  // Build character slots (Claude Code only)
+  const ocSlots: SessionSlot[] = [].map((s: MiniSessionInfo, i: number) => {
     const agent = agents.find((a) => a.id === s.agentId) || { id: s.agentId }
     const charName = agentCharMap[s.agentId]
     const char = characters.find((c) => c.name === charName) || DEFAULT_CHAR
@@ -2445,22 +2012,6 @@ export default function Mini() {
     }
   }, [syncExpandedWindowLayout])
   expandFnRef.current = expand
-  const updateModalWindowAdjustedRef = useRef(false)
-  const updateModalPrevExpandedRef = useRef(false)
-
-  const ensureUpdateModalWindow = useCallback(async () => {
-    if (settingsModeRef.current) return
-    if (updateModalWindowAdjustedRef.current) return
-    updateModalWindowAdjustedRef.current = true
-    updateModalPrevExpandedRef.current = expandedRef.current
-    expandedWindowModeRef.current = null
-    try {
-      await invoke('set_mini_size', { restore: false, position: mascotPositionRef.current, keepOnTop: true, mascotScale: mascotScaleRef.current })
-      await new Promise<void>((r) => setTimeout(r, 80))
-    } catch {
-      updateModalWindowAdjustedRef.current = false
-    }
-  }, [])
 
   const restoreCollapsedMascotPosition = useCallback(async () => {
     const pos = customPosRef.current
@@ -2471,198 +2022,6 @@ export default function Mini() {
       console.warn('[mini] restore custom mascot position failed:', e)
     }
   }, [])
-
-  const restoreWindowAfterUpdateModal = useCallback(async () => {
-    if (!updateModalWindowAdjustedRef.current) return
-    const wasExpanded = updateModalPrevExpandedRef.current
-    updateModalWindowAdjustedRef.current = false
-    if (settingsModeRef.current) return
-    try {
-      if (wasExpanded) {
-        await syncExpandedWindowLayout(viewModeRef.current)
-        setExpanded(true)
-        expandedRef.current = true
-        setShowPanel(true)
-      } else {
-        await invoke('set_mini_size', { restore: true, position: mascotPositionRef.current, mascotScale: mascotScaleRef.current, largeMascot: largeMascotRef.current, largeMascotScale: largeMascotScaleRef.current })
-        await restoreCollapsedMascotPosition()
-        setExpanded(false)
-        expandedRef.current = false
-        expandedWindowModeRef.current = null
-        setShowPanel(false)
-      }
-    } catch {}
-  }, [restoreCollapsedMascotPosition, syncExpandedWindowLayout])
-
-  const openAvailableUpdateModal = useCallback(
-    async (info: UpdateModalInfo) => {
-      if (settingsModeRef.current || settingsTransitioningRef.current || isCreateModalOpenRef.current) {
-        pendingUpdateInfoRef.current = info
-        return
-      }
-      setUpdateModalInfo(info)
-      setUpdateModalPhase('available')
-      setUpdateModalProgress(null)
-      setUpdateModalProgressStage('preparing')
-      hoverExpandedRef.current = false
-      if (hoverCloseTimerRef.current) {
-        clearTimeout(hoverCloseTimerRef.current)
-        hoverCloseTimerRef.current = null
-      }
-      setEffListCollapsed(true)
-      await ensureUpdateModalWindow()
-      updateModalOpenRef.current = true
-      setUpdateModalOpen(true)
-    },
-    [ensureUpdateModalWindow],
-  )
-
-  const closeUpdateModal = useCallback(() => {
-    updateModalRunOwnedRef.current = false
-    updateModalOpenRef.current = false
-    setUpdateModalOpen(false)
-    void restoreWindowAfterUpdateModal()
-  }, [restoreWindowAfterUpdateModal])
-
-  const skipCurrentUpdateVersion = useCallback(async () => {
-    if (!updateModalInfo?.latest) return
-    const store = await load('settings.json', { defaults: {}, autoSave: true })
-    await store.set('skipped_update_version', updateModalInfo.latest)
-    await store.save()
-    updateModalRunOwnedRef.current = false
-    updateModalOpenRef.current = false
-    setUpdateModalOpen(false)
-    void restoreWindowAfterUpdateModal()
-  }, [restoreWindowAfterUpdateModal, updateModalInfo?.latest])
-
-  const runUpdateFromModal = useCallback(async () => {
-    if (!updateModalInfo?.url) return
-    setUpdateModalPhase('downloading')
-    setUpdateModalProgress(0)
-    setUpdateModalProgressStage('preparing')
-    updateModalRunOwnedRef.current = true
-    hoverExpandedRef.current = false
-    if (hoverCloseTimerRef.current) {
-      clearTimeout(hoverCloseTimerRef.current)
-      hoverCloseTimerRef.current = null
-    }
-    setEffListCollapsed(true)
-    await ensureUpdateModalWindow()
-    updateModalOpenRef.current = true
-    setUpdateModalOpen(true)
-    try {
-      await invoke('run_update', { dmgUrl: updateModalInfo.url })
-    } catch (e) {
-      console.warn('[update modal] run_update failed:', e)
-      setUpdateModalPhase('available')
-    }
-  }, [ensureUpdateModalWindow, updateModalInfo?.url])
-
-  const restartFromModal = useCallback(() => {
-    invoke('exit_app').catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const checkForUpdates = async () => {
-      try {
-        // Always fetch — we want the `ui` block (e.g. petdex url) even
-        // when the modal cadence gate skips showing the update prompt.
-        const info = (await invoke('check_for_update', {
-          lang: i18n.language,
-        })) as UpdateModalInfo & { ui?: { petdex?: { url?: string } } | null }
-        if (cancelled) return
-        const remoteUrl = info?.ui?.petdex?.url
-        if (typeof remoteUrl === 'string' && /^https?:\/\//i.test(remoteUrl)) {
-          setPetdexUrl(remoteUrl)
-          setPetdexFailed(false)
-        } else {
-          // Server reachable but field missing/invalid: still treat as
-          // an error from the user's POV so the picker explains itself.
-          setPetdexFailed(true)
-        }
-        // Modal display is still rate-limited to once per day so we
-        // don't pester the user with the "new version" prompt on every
-        // app launch.
-        const store = await load('settings.json', { defaults: {}, autoSave: true })
-        const now = Date.now()
-        const lastCheckedAt = Number((await store.get('update_last_check_at')) ?? 0)
-        if (lastCheckedAt > 0 && now - lastCheckedAt < 86_400_000) return
-        await store.set('update_last_check_at', now)
-        await store.save()
-        if (!info?.hasUpdate) return
-        const skippedVersion = ((await store.get('skipped_update_version')) as string) || ''
-        if (skippedVersion && skippedVersion === info.latest) return
-        openAvailableUpdateModal(info)
-      } catch {
-        // Fetch failed entirely (offline, DNS, server down, etc.).
-        // Surface this to the petdex section via the "failed" flag so
-        // it can show a network error instead of silently breaking.
-        if (!cancelled) setPetdexFailed(true)
-      }
-    }
-    void checkForUpdates()
-    const timer = setInterval(() => {
-      void checkForUpdates()
-    }, 86_400_000)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [i18n.language, openAvailableUpdateModal])
-
-  useEffect(() => {
-    const unlisten = listen<UpdateProgressPayload>('update-progress', (event) => {
-      if (!updateModalOpenRef.current && !updateModalRunOwnedRef.current) return
-      const payload = event.payload
-      const stage = payload.stage || 'downloading'
-      setUpdateModalProgress(typeof payload.progress === 'number' ? payload.progress : null)
-      setUpdateModalProgressStage(stage)
-      if (stage === 'ready_to_restart') {
-        setUpdateModalPhase('ready_to_restart')
-      } else if (stage === 'preparing' || stage === 'downloading' || stage === 'downloaded') {
-        setUpdateModalPhase('downloading')
-      }
-      if (!updateModalOpenRef.current) {
-        void (async () => {
-          await ensureUpdateModalWindow()
-          updateModalOpenRef.current = true
-          setUpdateModalOpen(true)
-        })()
-      }
-    })
-    return () => {
-      unlisten.then((fn) => fn())
-    }
-  }, [ensureUpdateModalWindow])
-
-  useEffect(() => {
-    if (updateModalOpenRef.current) return
-    if (settingsMode || settingsTransitioning || isCreateModalOpen) return
-    const pending = pendingUpdateInfoRef.current
-    if (!pending) return
-    pendingUpdateInfoRef.current = null
-    void openAvailableUpdateModal(pending)
-  }, [isCreateModalOpen, openAvailableUpdateModal, settingsMode, settingsTransitioning])
-
-  useEffect(() => {
-    if (!updateModalOpen || updateModalPhase !== 'available' || !updateModalInfo?.hasUpdate) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const latest = (await invoke('check_for_update', { lang: i18n.language })) as UpdateModalInfo
-        if (cancelled) return
-        if (latest?.hasUpdate && latest.latest === updateModalInfo.latest) {
-          setUpdateModalInfo(latest)
-        }
-      } catch {
-        /* ignore */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [i18n.language, updateModalInfo?.hasUpdate, updateModalInfo?.latest, updateModalOpen, updateModalPhase])
 
   useEffect(() => {
     return () => {
@@ -4190,7 +3549,7 @@ export default function Mini() {
                 }}
                 onStar={() => {
                   closePetContextMenu()
-                  invoke('open_url', { url: 'https://github.com/rainnoon/oc-claw' }).catch(() => {})
+                  invoke('open_url', { url: 'https://github.com/yeshen112/cc-claw' }).catch(() => {})
                 }}
                 onFoodRain={triggerFoodRain}
                 onPlayAudio={playPetAudio}
@@ -4444,7 +3803,6 @@ export default function Mini() {
 
                             if (allItems.length === 0) {
                               const trackingTargets = [
-                                ...(hasConfiguredOpenClaw ? ['OpenClaw'] : []),
                                 ...(enableClaudeCode ? [isWindowsPlatform ? 'Claude Code CLI' : 'Claude Code'] : []),
                                 ...(isWindowsPlatform && enableClaudeDesktop ? ['Claude Code Desktop'] : []),
                                 ...(enableCodex ? ['Codex'] : []),
@@ -4925,7 +4283,7 @@ export default function Mini() {
                                               collapse()
                                             }
                                             // Codex approval should be made in Codex's own UI.
-                                            // oc-claw only surfaces a reminder and a jump action
+                                            // cc-claw only surfaces a reminder and a jump action
                                             // so the user can approve there.
                                             if (cs.source === 'codex') {
                                               return (
@@ -5091,7 +4449,7 @@ export default function Mini() {
                       <div className="mt-auto py-0.5 flex justify-center items-center select-none opacity-30 hover:opacity-60 transition-opacity">
                         <span
                           data-no-drag
-                          onClick={() => invoke('open_url', { url: 'https://github.com/rainnoon/oc-claw' })}
+                          onClick={() => invoke('open_url', { url: 'https://github.com/yeshen112/cc-claw' })}
                           className="text-[8px] font-bold tracking-[0.2em] text-slate-500 uppercase cursor-pointer"
                         >
                           oc–claw
@@ -5443,7 +4801,7 @@ export default function Mini() {
                       <div className="mt-auto pt-1.5 pb-1 flex justify-center items-center select-none">
                         <span
                           data-no-drag
-                          onClick={() => invoke('open_url', { url: 'https://github.com/rainnoon/oc-claw' })}
+                          onClick={() => invoke('open_url', { url: 'https://github.com/yeshen112/cc-claw' })}
                           className="text-[10px] font-black tracking-[0.25em] text-slate-500 uppercase cursor-pointer hover:text-slate-300 transition-colors"
                         >
                           oc–claw.ai
@@ -5452,22 +4810,6 @@ export default function Mini() {
                     </div>
                   </motion.div>
                 )
-              ) : selectedSessionKey ? (
-                /* ===== OpenClaw session chat ===== */
-                <motion.div
-                  key="oc-chat"
-                  style={{ background: '#1a1a1a', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
-                  initial={{ opacity: 0, filter: 'blur(8px)', y: -20 }}
-                  animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
-                  exit={{ opacity: 0, filter: 'blur(8px)', y: -20 }}
-                  transition={{ duration: 0.25, delay: 0.05 }}
-                >
-                  {sessionMessages.length === 0 ? (
-                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, textAlign: 'center', padding: '30px 0' }}>{t('common.loading')}</div>
-                  ) : (
-                    <ChatList messages={sessionMessages} accentColor="#2ecc71" />
-                  )}
-                </motion.div>
               ) : selectedClaudeSession ? (
                 /* ===== Claude session chat ===== */
                 <motion.div
@@ -5484,31 +4826,7 @@ export default function Mini() {
                     <ChatList messages={claudeConversation} accentColor="#007AFF" />
                   )}
                 </motion.div>
-              ) : showClaudeStats ? (
-                /* ===== Claude Code stats ===== */
-                <motion.div
-                  key="claude-stats"
-                  style={{ background: '#1a1a1a', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
-                  initial={{ opacity: 0, filter: 'blur(8px)', y: -20 }}
-                  animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
-                  exit={{ opacity: 0, filter: 'blur(8px)', y: -20 }}
-                  transition={{ duration: 0.25, delay: 0.05 }}
-                >
-                  <ClaudeStatsView source={claudeStatsSource} />
-                </motion.div>
-              ) : (
-                /* ===== Agent detail panel (ui-2 style) ===== */
-                <motion.div
-                  key="agent-detail"
-                  style={{ background: '#1a1a1a', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
-                  initial={{ opacity: 0, filter: 'blur(8px)', y: -20 }}
-                  animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
-                  exit={{ opacity: 0, filter: 'blur(8px)', y: -20 }}
-                  transition={{ duration: 0.25, delay: 0.05 }}
-                >
-                  <AgentDetailView agent={selectedAgent} metrics={metrics} extraInfo={extraInfo} />
-                </motion.div>
-              )}
+              ) : null}
             </AnimatePresence>
           </div>
         </div>
@@ -5838,7 +5156,7 @@ export default function Mini() {
                   }}
                 >
                   <span
-                    onClick={() => invoke('open_url', { url: 'https://github.com/rainnoon/oc-claw' })}
+                    onClick={() => invoke('open_url', { url: 'https://github.com/yeshen112/cc-claw' })}
                     style={{
                       color: 'rgba(255,255,255,0.35)',
                       fontSize: 11,
@@ -5868,18 +5186,6 @@ export default function Mini() {
         )}
       </AnimatePresence>
 
-      <UpdateModal
-        open={updateModalOpen}
-        phase={updateModalPhase}
-        info={updateModalInfo}
-        progress={updateModalProgress}
-        progressStage={updateModalProgressStage}
-        onLater={closeUpdateModal}
-        onSkipVersion={skipCurrentUpdateVersion}
-        onUpdateNow={runUpdateFromModal}
-        onRestartNow={restartFromModal}
-      />
-
       <CreateCharacterModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -5889,9 +5195,6 @@ export default function Mini() {
           setCharacters(chars)
         }}
       />
-
-      {/* Onboarding modal — first launch only */}
-      <OnboardingModal open={showOnboarding} onSelect={handleSelectAppMode} />
 
       {/* Pet context menu rendered inside mascot wrapper below */}
     </div>

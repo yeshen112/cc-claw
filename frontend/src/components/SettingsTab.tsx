@@ -9,16 +9,7 @@ import {
 import { Loader2, Check, ChevronDown, Copy, Plus, Trash2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { getStore, loadOcConnections, saveOcConnections } from '../lib/store'
-import type { OcConnection } from '../lib/types'
-
-type UpdateProgressPayload = {
-  stage: string
-  progress?: number | null
-  downloadedBytes?: number
-  totalBytes?: number | null
-  message?: string
-}
+import { getStore } from '../lib/store'
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -50,292 +41,37 @@ function CopyCode({ text }: { text: string }) {
   )
 }
 
-function ConnectionRow({ conn, onUpdate, onDelete, disableLocal }: { conn: OcConnection; onUpdate: (c: OcConnection) => void; onDelete: () => void; disableLocal?: boolean }) {
-  const { t } = useTranslation()
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<'success' | 'error' | null>(null)
-  const [testMsg, setTestMsg] = useState('')
-  const [showGuide, setShowGuide] = useState(false)
-  // Used to discard results from a cancelled test — the Tauri invoke can't
-  // be aborted, but we stop the UI from acting on stale results.
-  const cancelledRef = useRef(false)
-
-  const testConnection = async () => {
-    cancelledRef.current = false
-    setTesting(true)
-    setTestResult(null)
-    setTestMsg('')
-    try {
-      if (conn.type === 'remote') {
-        // Reset backoff and stale socket so manual test always retries immediately
-        await invoke('reset_ssh', { sshHost: conn.host, sshUser: conn.user }).catch(() => {})
-        const result: any = await invoke('get_agents', { mode: 'remote', sshHost: conn.host, sshUser: conn.user })
-        if (cancelledRef.current) return
-        // Query which SSH key was used for this connection
-        let keyInfo = ''
-        try {
-          const key = await invoke('get_ssh_key_info', { sshHost: conn.host, sshUser: conn.user }) as string | null
-          if (key) keyInfo = ` · ${t('settings.key')} ${key}`
-        } catch {}
-        setTestMsg(`${result.length} ${t('settings.agents')}${keyInfo}`)
-      } else {
-        const store = await getStore()
-        const agentId = ((await store.get('tracked_agent')) as string) || 'main'
-        const result: any = await invoke('get_status', { gatewayUrl: 'http://localhost:4446', token: '', agentId })
-        if (cancelledRef.current) return
-        setTestMsg(`${result.sessions.length} ${t('settings.sessions')}`)
-      }
-      setTestResult('success')
-      setTimeout(() => setTestResult(null), 3000)
-    } catch (e: any) {
-      if (cancelledRef.current) return
-      setTestResult('error')
-      setTestMsg(String(e))
-    }
-    setTesting(false)
-  }
-
-  const cancelTest = () => {
-    cancelledRef.current = true
-    setTesting(false)
-    setTestResult(null)
-    setTestMsg('')
-    // Kill the SSH connection so it doesn't hang in the background
-    if (conn.type === 'remote' && conn.host && conn.user) {
-      invoke('close_ssh', { sshHost: conn.host, sshUser: conn.user }).catch(() => {})
-    }
-  }
-
-  return (
-    <div className="p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex bg-black/50 p-0.5 rounded-lg border border-white/5">
-            {(['local', 'remote'] as const).map((typ) => {
-              // Only one local connection allowed across all connections
-              const disabled = typ === 'local' && disableLocal && conn.type !== 'local'
-              return (
-                <button
-                  key={typ}
-                  onClick={() => !disabled && onUpdate({ ...conn, type: typ })}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${conn.type === typ ? 'bg-white/10 text-white' : disabled ? 'text-white/15 cursor-not-allowed' : 'text-white/40 hover:text-white/60'}`}
-                >
-                  {typ === 'local' ? t('settings.local') : t('settings.remote')}
-                </button>
-              )
-            })}
-          </div>
-          <span className="text-xs text-white/30">
-            {conn.type === 'local' ? '~/.openclaw' : conn.host ? `${conn.user || 'root'}@${conn.host}` : t('settings.notConfigured')}
-          </span>
-        </div>
-        <button onClick={onDelete} className="p-1.5 text-white/20 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      <AnimatePresence>
-        {conn.type === 'remote' && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="flex flex-col gap-3 overflow-hidden"
-          >
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={conn.user || ''}
-                onChange={(e) => onUpdate({ ...conn, user: e.target.value })}
-                placeholder={t('settings.username')}
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                className="w-24 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-white/30 transition-colors"
-              />
-              <span className="self-center text-white/30 text-sm">@</span>
-              <input
-                type="text"
-                value={conn.host || ''}
-                onChange={(e) => onUpdate({ ...conn, host: e.target.value })}
-                placeholder={t('settings.serverAddress')}
-                className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-white/30 transition-colors"
-              />
-            </div>
-            <button
-              onClick={() => setShowGuide(!showGuide)}
-              className="flex items-center gap-1 text-xs text-white/40 hover:text-white/60 transition-colors w-fit"
-            >
-              <ChevronDown className={`w-3 h-3 transition-transform ${showGuide ? 'rotate-0' : '-rotate-90'}`} />
-              {t('settings.howToConnect')}
-            </button>
-            <AnimatePresence>
-              {showGuide && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3 flex flex-col gap-2 text-xs text-white/50 leading-relaxed">
-                    <p className="text-white/70 font-medium">{t('settings.prerequisites')}</p>
-                    <p>{t('settings.prerequisitesDesc')}</p>
-                    <p className="text-white/70 font-medium pt-1">{t('settings.steps')}</p>
-                    <p>{t('settings.step1')}</p>
-                    <CopyCode text="ssh-keygen -t ed25519" />
-                    <p>{t('settings.step2')}</p>
-                    <CopyCode text="ssh-copy-id -i ~/.ssh/id_ed25519.pub 用户名@xx.xx.xx.xx" />
-                    <p>{t('settings.step3')}</p>
-                    <CopyCode text={`ssh 用户名@xx.xx.xx.xx "echo ok"`} />
-                    <p>{t('settings.step4')}</p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="flex items-center gap-2">
-        <button
-          onClick={testConnection}
-          disabled={testing || (conn.type === 'remote' && (!conn.host || !conn.user))}
-          className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
-        >
-          {testing && <Loader2 className="w-3 h-3 animate-spin" />}
-          {t('common.test')}
-        </button>
-        {testing && (
-          <button
-            onClick={cancelTest}
-            className="px-3 py-1.5 bg-white/5 hover:bg-red-500/20 border border-white/10 rounded-lg text-xs font-medium text-white/50 hover:text-red-400 transition-colors"
-          >
-            {t('common.cancel')}
-          </button>
-        )}
-        {testResult === 'success' && (
-          <span className="text-xs text-emerald-400 flex items-center gap-1">
-            <Check className="w-3 h-3" /> {t('common.success')} {testMsg && `· ${testMsg}`}
-          </span>
-        )}
-        {testResult === 'error' && (
-          <div className="text-xs text-red-400 w-full">
-            <span>{t('common.failed')}</span>
-            <pre className="mt-1 p-2 bg-red-500/10 border border-red-500/20 rounded-lg whitespace-pre-wrap break-all max-h-[120px] overflow-y-auto font-mono text-[11px] leading-relaxed select-text">
-              {testMsg}
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, onToggleWaitingSound, soundEnabled, onToggleSoundEnabled, codexSoundEnabled, onToggleCodexSoundEnabled, cursorSoundEnabled, onToggleCursorSoundEnabled, autoCloseCompletion, onToggleAutoCloseCompletion, autoExpandOnTask, onToggleAutoExpandOnTask, islandBg, onChangeIslandBg, bgPos, onChangeBgPos, panelMaxHeight, onChangePanelMaxHeight, hoverDelay, onChangeHoverDelay, largeMascotScale, onChangeLargeMascotScale, appMode, onChangeAppMode, petSfxEnabled, onTogglePetSfxEnabled, petIdleIntervalMin, onChangePetIdleIntervalMin }: { notifySound: 'default' | 'manbo'; onChangeNotifySound: (v: 'default' | 'manbo') => void; waitingSound: boolean; onToggleWaitingSound: (v: boolean) => void; soundEnabled: boolean; onToggleSoundEnabled: (v: boolean) => void; codexSoundEnabled: boolean; onToggleCodexSoundEnabled: (v: boolean) => void; cursorSoundEnabled: boolean; onToggleCursorSoundEnabled: (v: boolean) => void; autoCloseCompletion: boolean; onToggleAutoCloseCompletion: (v: boolean) => void; autoExpandOnTask: boolean; onToggleAutoExpandOnTask: (v: boolean) => void; islandBg: string; onChangeIslandBg: (v: string) => void; bgPos: { x: number; y: number }; onChangeBgPos: (v: { x: number; y: number }) => void; panelMaxHeight: number; onChangePanelMaxHeight: (v: number) => void; hoverDelay: number; onChangeHoverDelay: (v: number) => void; largeMascotScale: number; onChangeLargeMascotScale: (v: number) => void; appMode?: 'coding' | 'pet' | null; onChangeAppMode?: (v: 'coding' | 'pet') => void; petSfxEnabled?: boolean; onTogglePetSfxEnabled?: (v: boolean) => void; petIdleIntervalMin?: number; onChangePetIdleIntervalMin?: (v: number) => void }) {
   const { t, i18n } = useTranslation()
   const isWindowsPlatform = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows')
-  const [connections, setConnections] = useState<OcConnection[]>([])
   const [enableClaudeCode, setEnableClaudeCode] = useState(true)
   const [hookStatus, setHookStatus] = useState('')
-  const [enableClaudeDesktop, setEnableClaudeDesktop] = useState(true)
-  const [claudeDesktopHookStatus, setClaudeDesktopHookStatus] = useState('')
-  const [enableCodex, setEnableCodex] = useState(!isWindowsPlatform)
-  const [codexHookStatus, setCodexHookStatus] = useState('')
-  const [enableCursor, setEnableCursor] = useState(true)
-  const [cursorHookStatus, setCursorHookStatus] = useState('')
   const [enableAutostart, setEnableAutostart] = useState(false)
   const [autostartStatus, setAutostartStatus] = useState('')
-  const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string; hasUpdate: boolean; url: string } | null>(null)
-  const [updateChecking, setUpdateChecking] = useState(false)
-  const [updateCheckResult, setUpdateCheckResult] = useState<'success' | 'error' | null>(null)
-  const [updateCheckMsg, setUpdateCheckMsg] = useState('')
-  const [updating, setUpdating] = useState(false)
-  const [updateProgress, setUpdateProgress] = useState<number | null>(null)
-  const [updateProgressMsg, setUpdateProgressMsg] = useState('')
-  const [updateRunResult, setUpdateRunResult] = useState<'success' | 'error' | null>(null)
-  const [updateRunMsg, setUpdateRunMsg] = useState('')
   const [backgrounds, setBackgrounds] = useState<string[]>([])
   const [bgPreviewUrl, setBgPreviewUrl] = useState<string | null>(null)
   const [bgNaturalSize, setBgNaturalSize] = useState<{ w: number; h: number } | null>(null)
   const cropContainerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
   const showIslandBackgroundSettings = false
-  const resolveUpdateProgressText = useCallback((stage?: string, fallbackMessage?: string) => {
-    if (stage) {
-      const key = `updateModal.progress.${stage}`
-      const localized = t(key)
-      if (localized !== key) return localized
-    }
-    return fallbackMessage || ''
-  }, [t])
-
-  const checkForUpdate = useCallback(async (showFeedback = false) => {
-    setUpdateChecking(true)
-    if (showFeedback) {
-      setUpdateCheckResult(null)
-      setUpdateCheckMsg('')
-    }
-    try {
-      const info = await invoke('check_for_update', { lang: i18n.language }) as { current: string; latest: string; hasUpdate: boolean; url: string; notes?: string }
-      setUpdateInfo(info)
-      if (showFeedback) {
-        setUpdateCheckResult('success')
-        setUpdateCheckMsg(info.hasUpdate ? `${t('settings.newVersionFound')} v${info.latest}` : t('settings.alreadyLatest'))
-      }
-    } catch (e: any) {
-      if (showFeedback) {
-        setUpdateCheckResult('error')
-        setUpdateCheckMsg(`${t('settings.checkFailed')}${String(e)}`)
-      }
-    } finally {
-      setUpdateChecking(false)
-    }
-  }, [i18n.language, t])
-
   useEffect(() => {
     ;(async () => {
-      const conns = await loadOcConnections()
-      setConnections(conns)
       const store = await getStore()
       const cc = await store.get('enable_claudecode')
       if (typeof cc === 'boolean') setEnableClaudeCode(cc)
-      const ccDesktop = await store.get('enable_claude_desktop')
-      if (typeof ccDesktop === 'boolean') setEnableClaudeDesktop(ccDesktop)
-      const cod = await store.get('enable_codex')
-      if (isWindowsPlatform) {
-        setEnableCodex(false)
-        await store.set('enable_codex', false)
-        await store.save()
-      } else if (typeof cod === 'boolean') setEnableCodex(cod)
-      const cur = await store.get('enable_cursor')
-      if (typeof cur === 'boolean') setEnableCursor(cur)
-      // Reconcile autostart toggle with the system: the OS-level registration
-      // (registry on Windows, LaunchAgent on macOS) is the source of truth in
-      // case the user disabled it externally; mirror that into our store so
-      // the UI never lies about the current state.
       try {
         const sysEnabled = await isAutostartEnabled()
         setEnableAutostart(sysEnabled)
         await store.set('enable_autostart', sysEnabled)
         await store.save()
       } catch {
-        // ignore — toggle stays at default false if the plugin can't report
+        // ignore
       }
     })()
-    void checkForUpdate()
     if (showIslandBackgroundSettings) {
       invoke('list_backgrounds').then((list: any) => setBackgrounds(list as string[])).catch(() => {})
     }
-  }, [checkForUpdate])
-
-  useEffect(() => {
-    const unlisten = listen<UpdateProgressPayload>('update-progress', (event) => {
-      const payload = event.payload
-      setUpdateProgress(typeof payload.progress === 'number' ? payload.progress : null)
-      setUpdateProgressMsg(resolveUpdateProgressText(payload.stage, payload.message))
-    })
-    return () => { unlisten.then((fn) => fn()) }
-  }, [resolveUpdateProgressText])
+  }, [])
 
   // Load preview image for current background
   useEffect(() => {
@@ -405,31 +141,6 @@ export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, on
     window.addEventListener('touchend', onUp)
   }, [bgNaturalSize, onChangeBgPos])
 
-  const updateConnection = (idx: number, conn: OcConnection) => {
-    const updated = [...connections]
-    updated[idx] = conn
-    setConnections(updated)
-    saveOcConnections(updated)
-  }
-
-  const deleteConnection = (idx: number) => {
-    const conn = connections[idx]
-    if (conn.type === 'remote' && conn.host && conn.user) {
-      invoke('close_ssh', { sshHost: conn.host, sshUser: conn.user }).catch(() => {})
-    }
-    const updated = connections.filter((_, i) => i !== idx)
-    setConnections(updated)
-    saveOcConnections(updated)
-  }
-
-  const addConnection = () => {
-    // Default to remote if a local connection already exists (only one local allowed)
-    const hasLocal = connections.some(c => c.type === 'local')
-    const updated = [...connections, { id: crypto.randomUUID(), type: (hasLocal ? 'remote' : 'local') as OcConnection['type'] }]
-    setConnections(updated)
-    saveOcConnections(updated)
-  }
-
   const toggleClaudeCode = async (val: boolean) => {
     setEnableClaudeCode(val)
     const store = await getStore()
@@ -441,55 +152,6 @@ export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, on
         setHookStatus(t('settings.hookInstalled'))
       } catch (e: any) {
         setHookStatus(`${t('settings.hookFailed')} ${String(e)}`)
-      }
-    }
-  }
-
-  // CC Desktop shares the same on-disk hook script as CC CLI — toggling the
-  // listener purely gates UI visibility and notifications. We still call
-  // install_claude_hooks on enable so a fresh install (CLI off, Desktop on)
-  // registers the hook script.
-  const toggleClaudeDesktop = async (val: boolean) => {
-    setEnableClaudeDesktop(val)
-    const store = await getStore()
-    await store.set('enable_claude_desktop', val)
-    await store.save()
-    if (val) {
-      try {
-        await invoke('install_claude_hooks')
-        setClaudeDesktopHookStatus(t('settings.hookInstalled'))
-      } catch (e: any) {
-        setClaudeDesktopHookStatus(`${t('settings.hookFailed')} ${String(e)}`)
-      }
-    }
-  }
-
-  const toggleCursor = async (val: boolean) => {
-    setEnableCursor(val)
-    const store = await getStore()
-    await store.set('enable_cursor', val)
-    await store.save()
-    if (val) {
-      try {
-        await invoke('install_cursor_hooks')
-        setCursorHookStatus(t('settings.hookInstalled'))
-      } catch (e: any) {
-        setCursorHookStatus(`${t('settings.hookFailed')} ${String(e)}`)
-      }
-    }
-  }
-
-  const toggleCodex = async (val: boolean) => {
-    setEnableCodex(val)
-    const store = await getStore()
-    await store.set('enable_codex', val)
-    await store.save()
-    if (val) {
-      try {
-        await invoke('install_claude_hooks')
-        setCodexHookStatus(t('settings.hookInstalled'))
-      } catch (e: any) {
-        setCodexHookStatus(`${t('settings.hookFailed')} ${String(e)}`)
       }
     }
   }
@@ -617,87 +279,17 @@ export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, on
       )}
 
       {!isPetMode && <>
-      {/* OpenClaw 连接 */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium text-white">{t('settings.ocConnections')}</h2>
-          <button
-            onClick={addConnection}
-            className="flex items-center gap-1 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium text-white transition-colors"
-          >
-            <Plus className="w-3 h-3" /> {t('common.add')}
-          </button>
-        </div>
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden divide-y divide-white/5">
-          {connections.length === 0 ? (
-            <div className="text-center text-white/30 py-8 text-sm">
-              {t('settings.noConnections')}
-            </div>
-          ) : (
-            connections.map((conn, idx) => (
-              <ConnectionRow
-                key={conn.id}
-                conn={conn}
-                onUpdate={(c) => updateConnection(idx, c)}
-                onDelete={() => deleteConnection(idx)}
-                disableLocal={connections.some((c, i) => i !== idx && c.type === 'local')}
-              />
-            ))
-          )}
-        </div>
-      </section>
-
       {/* Claude Code */}
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-medium text-white">Claude Code</h2>
         <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b border-white/5">
+          <div className="flex items-center justify-between p-4">
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-white/90">{t('settings.enableClaudeCli', 'Enable Claude Code CLI')}</span>
               <span className="text-xs text-white/40">{t('settings.enableClaudeCliDesc', 'Monitor local Claude Code CLI sessions via Hooks')}</span>
               {hookStatus && <span className="text-xs text-white/30 mt-1">{hookStatus}</span>}
             </div>
             <Toggle checked={enableClaudeCode} onChange={toggleClaudeCode} />
-          </div>
-          <div className="flex items-center justify-between p-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-white/90">{t('settings.enableClaudeDesktop', 'Enable Claude Code Desktop')}</span>
-              <span className="text-xs text-white/40">{t('settings.enableClaudeDesktopDesc', 'Monitor local Claude Code Desktop sessions via Hooks')}</span>
-              {claudeDesktopHookStatus && <span className="text-xs text-white/30 mt-1">{claudeDesktopHookStatus}</span>}
-            </div>
-            <Toggle checked={enableClaudeDesktop} onChange={toggleClaudeDesktop} />
-          </div>
-        </div>
-      </section>
-
-      {!isWindowsPlatform && (
-      /* Codex (not yet supported on Windows) */
-      <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium text-white">{t('settings.codex', 'Codex')}</h2>
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-white/90">{t('settings.enableCodex', 'Enable Codex')}</span>
-              <span className="text-xs text-white/40">{t('settings.enableCodexDesc', 'Monitor local Codex sessions via Hooks')}</span>
-              {codexHookStatus && <span className="text-xs text-white/30 mt-1">{codexHookStatus}</span>}
-            </div>
-            <Toggle checked={enableCodex} onChange={toggleCodex} />
-          </div>
-        </div>
-      </section>
-      )}
-
-      {/* Cursor */}
-      <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium text-white">Cursor</h2>
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-white/90">{t('settings.enableCursor', 'Enable Cursor')}</span>
-              <span className="text-xs text-white/40">{t('settings.enableCursorDesc', 'Monitor local Cursor agent sessions via Hooks')}</span>
-              {cursorHookStatus && <span className="text-xs text-white/30 mt-1">{cursorHookStatus}</span>}
-            </div>
-            <Toggle checked={enableCursor} onChange={toggleCursor} />
           </div>
         </div>
       </section>
@@ -883,22 +475,6 @@ export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, on
             </div>
             <Toggle checked={soundEnabled} onChange={onToggleSoundEnabled} />
           </div>
-          {!isWindowsPlatform && (
-          <div className="flex items-center justify-between p-4 border-b border-white/5">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-white/90">{t('settings.codexSound', 'Codex Completion Sound')}</span>
-              <span className="text-xs text-white/40">{t('settings.codexSoundDesc', 'Play sound when Codex finishes a task')}</span>
-            </div>
-            <Toggle checked={codexSoundEnabled} onChange={onToggleCodexSoundEnabled} />
-          </div>
-          )}
-          <div className="flex items-center justify-between p-4 border-b border-white/5">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-white/90">{t('settings.cursorSound', 'Cursor Completion Sound')}</span>
-              <span className="text-xs text-white/40">{t('settings.cursorSoundDesc', 'Play sound when Cursor finishes a task')}</span>
-            </div>
-            <Toggle checked={cursorSoundEnabled} onChange={onToggleCursorSoundEnabled} />
-          </div>
           <div className="flex items-center justify-between p-4 border-b border-white/5">
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-white/90">{t('settings.waitingSound')}</span>
@@ -924,7 +500,7 @@ export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, on
           <div className="flex items-center justify-between p-4">
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-white/90">{t('settings.autostart', 'Launch on Login')}</span>
-              <span className="text-xs text-white/40">{t('settings.autostartDesc', 'Start oc-claw automatically when you log in')}</span>
+              <span className="text-xs text-white/40">{t('settings.autostartDesc', 'Start cc-claw automatically when you log in')}</span>
               {autostartStatus && <span className="text-xs text-red-400 mt-1 break-all">{autostartStatus}</span>}
             </div>
             <Toggle checked={enableAutostart} onChange={toggleAutostart} />
@@ -938,108 +514,8 @@ export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, on
         <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between p-4">
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-white/90">{t('settings.currentVersion')}</span>
-              <span className="text-xs text-white/40">
-                {updateInfo ? `v${updateInfo.current}` : '...'}
-                {updateInfo && !updateInfo.hasUpdate && ` (${t('settings.latest')})`}
-                {updateInfo?.hasUpdate && (
-                  <span className="ml-2 text-emerald-400">v{updateInfo.latest} {t('settings.available')}</span>
-                )}
-              </span>
-              {updateCheckResult === 'success' && updateCheckMsg && (
-                <span className="text-xs text-emerald-400">{updateCheckMsg}</span>
-              )}
-              {updateCheckResult === 'error' && updateCheckMsg && (
-                <span className="text-xs text-red-400 break-all">{updateCheckMsg}</span>
-              )}
-              {updateRunResult === 'success' && updateRunMsg && (
-                <span className="text-xs text-emerald-400">{updateRunMsg}</span>
-              )}
-              {updateRunResult === 'error' && updateRunMsg && (
-                <span className="text-xs text-red-400 break-all">{updateRunMsg}</span>
-              )}
-              {(updating || updateProgressMsg) && (
-                <div className="flex flex-col gap-1 pt-1">
-                  <span className="text-xs text-white/50">
-                    {updateProgressMsg}
-                    {typeof updateProgress === 'number' && updateProgress < 100 && ` · ${updateProgress}%`}
-                  </span>
-                  {typeof updateProgress === 'number' && (
-                    <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 transition-all duration-200"
-                        style={{ width: `${Math.max(updateProgress, 2)}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {updateInfo?.hasUpdate && (
-                <button
-                  onClick={async () => {
-                    setUpdating(true)
-                    setUpdateProgress(0)
-                    setUpdateProgressMsg(resolveUpdateProgressText('preparing', t('settings.preparingDownload')))
-                    setUpdateRunResult(null)
-                    setUpdateRunMsg('')
-                    try {
-                      await invoke('run_update', { dmgUrl: updateInfo?.url || '' })
-                      setUpdateRunResult('success')
-                      setUpdateRunMsg(t('settings.downloadComplete'))
-                      window.setTimeout(() => {
-                        void invoke('exit_app').catch((e: any) => {
-                          setUpdating(false)
-                          setUpdateRunResult('error')
-                          setUpdateRunMsg(`${t('settings.exitFailed')}${String(e)}`)
-                        })
-                      }, 600)
-                    } catch (e: any) {
-                      setUpdateProgress(null)
-                      setUpdateProgressMsg('')
-                      setUpdateRunResult('error')
-                      setUpdateRunMsg(`${t('settings.updateFailed')}${String(e)}`)
-                      setUpdating(false)
-                    }
-                  }}
-                  disabled={updating}
-                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  {updating ? t('settings.updating') : t('settings.updateNow')}
-                </button>
-              )}
-              <button
-                onClick={() => { void checkForUpdate(true) }}
-                disabled={updateChecking}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
-              >
-                {updateChecking ? t('settings.checking') : t('settings.checkUpdate')}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Language selector */}
-      <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium text-white">{t('settings.language')}</h2>
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-white/90">{t('settings.language')}</span>
-              <span className="text-xs text-white/40">{t('settings.languageDesc')}</span>
-            </div>
-            <div className="flex flex-wrap bg-black/50 p-0.5 rounded-lg border border-white/5 gap-0.5">
-              {(['zh', 'en', 'ja', 'ko', 'es', 'fr'] as const).map((lng) => (
-                <button
-                  key={lng}
-                  onClick={async () => { i18n.changeLanguage(lng); localStorage.setItem('oc-claw-lang', lng); const store = await getStore(); await store.set('oc-claw-lang', lng); await store.save(); invoke('update_tray_language', { lang: lng }).catch(() => {}) }}
-                  className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${i18n.language === lng ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'}`}
-                >
-                  {t(`settings.lang${lng.charAt(0).toUpperCase() + lng.slice(1)}`)}
-                </button>
-              ))}
+              <span className="text-sm font-medium text-white/90">{t('settings.version', 'Version')}</span>
+              <span className="text-xs text-white/40">v1.8.4</span>
             </div>
           </div>
         </div>

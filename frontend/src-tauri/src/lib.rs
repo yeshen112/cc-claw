@@ -806,16 +806,16 @@ fn build_agent_health_from_meta(
 }
 
 /// Get the SSH control socket path for a given host.
-/// On macOS/Linux: /tmp/oc-claw-ssh-user@host:22
+/// On macOS/Linux: /tmp/cc-claw-ssh-user@host:22
 /// On Windows: returns a path in %TEMP% (used only as a "marker" since ControlMaster
 /// is not supported; the marker file tracks whether a connection was recently validated).
 fn ssh_control_path(ssh_user: &str, ssh_host: &str) -> String {
     #[cfg(unix)]
-    { format!("/tmp/oc-claw-ssh-{}@{}:22", ssh_user, ssh_host) }
+    { format!("/tmp/cc-claw-ssh-{}@{}:22", ssh_user, ssh_host) }
     #[cfg(windows)]
     {
         let temp = std::env::temp_dir();
-        temp.join(format!("oc-claw-ssh-{}@{}.marker", ssh_user, ssh_host))
+        temp.join(format!("cc-claw-ssh-{}@{}.marker", ssh_user, ssh_host))
             .to_string_lossy().to_string()
     }
 }
@@ -1138,7 +1138,7 @@ async fn close_ssh(ssh_host: Option<String>, ssh_user: Option<String>) -> Result
         if let Ok(mut entries) = tokio::fs::read_dir(&scan_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("oc-claw-ssh-") {
+                if name.starts_with("cc-claw-ssh-") {
                     let _ = tokio::fs::remove_file(entry.path()).await;
                     log::info!("[close_ssh] removed stale socket/marker: {}", name);
                 }
@@ -3064,7 +3064,7 @@ async fn open_mini(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     let builder = WebviewWindowBuilder::new(&app, "mini", WebviewUrl::App("index.html#/mini".into()))
-        .title("oc-claw Mini")
+        .title("cc-claw Mini")
         .inner_size(COLLAPSED_MASCOT_BASE_W, COLLAPSED_MASCOT_BASE_H)
         .decorations(false)
         .transparent(true)
@@ -4246,7 +4246,7 @@ async fn get_now_playing(app: tauri::AppHandle) -> Result<String, String> {
             let cli_status = nowplaying_cli_status();
 
             let result = if let Some((playing, ref source)) = cli_status {
-                if !playing || source.contains("openclaw") || source.contains("ooclaw") || source.contains("com.apple.webkit") {
+                if !playing || source.contains("openclaw") || source.contains("ccclaw") || source.contains("com.apple.webkit") {
                     // Not playing, or our own pet SFX hijacked the Now Playing session.
                     // WebView audio (HTML5 Audio / <video>) reports as "com.apple.WebKit.GPU",
                     // not the host app's bundle ID, so we must also filter that.
@@ -6526,7 +6526,7 @@ async fn open_detail_panel(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     let win = WebviewWindowBuilder::new(&app, "detail", WebviewUrl::App("index.html#/detail".into()))
-        .title("oc-claw - Detail")
+        .title("cc-claw - Detail")
         .inner_size(480.0, 600.0)
         .decorations(true)
         .resizable(true)
@@ -6748,7 +6748,7 @@ fn collect_jsonl_files_recursive(root: &std::path::Path) -> Vec<PathBuf> {
 /// Build an empty 14-day `ClaudeStats` skeleton with zeroed daily entries.
 /// Used for sources where token usage is intentionally not surfaced — at the
 /// moment that means `cursor`, since Cursor doesn't expose reliable per-turn
-/// token counts to oc-claw (it stopped writing them to its local SQLite in
+/// token counts to cc-claw (it stopped writing them to its local SQLite in
 /// April 2026, and the hook payload would only cover sessions completed after
 /// the user enables tracking, which is misleading).
 fn empty_claude_stats() -> ClaudeStats {
@@ -7086,11 +7086,11 @@ fn get_frontmost_app_name() -> String {
 fn get_frontmost_app_name() -> String { String::new() }
 
 fn is_cursor_frontmost_app(name: &str) -> bool {
-    name == "Cursor" || name == "oc-claw"
+    name == "Cursor" || name == "cc-claw"
 }
 
 fn is_codex_frontmost_app(name: &str) -> bool {
-    if name == "oc-claw" || name == "Code" || name == "Visual Studio Code" {
+    if name == "cc-claw" || name == "Code" || name == "Visual Studio Code" {
         return true;
     }
     let lowered = name.to_ascii_lowercase();
@@ -7105,9 +7105,9 @@ fn is_codex_host_terminal(name: &str) -> bool {
 /// `host_terminal` comes from process-chain detection (e.g. "Terminal",
 /// "iTerm2", "Warp") while `frontmost` is the short app name from
 /// NSWorkspace (e.g. "Terminal", "iTerm2", "Warp").
-/// Also handles "oc-claw" (our own panel can steal focus).
+/// Also handles "cc-claw" (our own panel can steal focus).
 fn frontmost_matches_host_terminal(frontmost: &str, host_terminal: &str) -> bool {
-    if frontmost == "oc-claw" {
+    if frontmost == "cc-claw" {
         return true;
     }
     if frontmost.eq_ignore_ascii_case(host_terminal) {
@@ -7252,7 +7252,7 @@ async fn resolve_claude_permission(
     };
 
     // Codex permissions are intentionally approved in Codex's native UI.
-    // The oc-claw popup only serves as a reminder + jump action and must not
+    // The cc-claw popup only serves as a reminder + jump action and must not
     // make the final allow/deny decision for Codex sessions.
     if source == "codex" {
         log::info!(
@@ -7805,7 +7805,7 @@ async fn spawn_demo_mascot(app: tauri::AppHandle, pet_id: String) -> Result<Stri
         label.clone(),
         tauri::WebviewUrl::App(url.into()),
     )
-    .title("oc-claw demo mascot")
+    .title("cc-claw demo mascot")
     .inner_size(96.0, 96.0)
     .min_inner_size(96.0, 96.0)
     .resizable(false)
@@ -8734,7 +8734,7 @@ fn find_host_app_for_pid_win(pid: u32) -> Option<String> {
 /// Cursor window so that at least the app is raised.
 ///
 /// `SetForegroundWindow` is restricted by Windows: it only fully succeeds when
-/// the caller is itself the foreground process. oc-claw normally is foreground
+/// the caller is itself the foreground process. cc-claw normally is foreground
 /// at click time (the user just clicked the mini panel), so this works in
 /// practice. We additionally restore the window if it is minimized.
 #[cfg(target_os = "windows")]
@@ -9506,8 +9506,8 @@ fn get_tty_for_pid(pid: u32) -> Option<String> {
 ///     "version": "1.6.0",
 ///     "notes": "...",
 ///     "platforms": {
-///       "macos":   { "url": "https://github.com/.../oc-claw_1.6.0_aarch64.dmg" },
-///       "windows": { "url": "https://github.com/.../oc-claw_1.6.0_x64-setup.exe" }
+///       "macos":   { "url": "https://github.com/.../cc-claw_1.6.0_aarch64.dmg" },
+///       "windows": { "url": "https://github.com/.../cc-claw_1.6.0_x64-setup.exe" }
 ///     }
 ///   }
 ///
@@ -9562,7 +9562,7 @@ async fn check_for_update(app: tauri::AppHandle, lang: Option<String>) -> Result
     };
     log::info!("[update] checking {} (current={})", update_url, current);
     let mut client_builder = reqwest::Client::builder()
-        .user_agent("oc-claw");
+        .user_agent("cc-claw");
     if cfg!(debug_assertions) {
         client_builder = client_builder.no_proxy();
     }
@@ -9683,7 +9683,7 @@ async fn run_update(app: tauri::AppHandle, dmg_url: String) -> Result<(), String
         return Err("No download URL provided".to_string());
     }
     let client = reqwest::Client::builder()
-        .user_agent("oc-claw-updater")
+        .user_agent("cc-claw-updater")
         .build()
         .map_err(|e| format!("client build error: {e}"))?;
     emit_update_progress(&app, "preparing", Some(0), 0, None, "准备下载更新");
@@ -9701,16 +9701,16 @@ async fn run_update(app: tauri::AppHandle, dmg_url: String) -> Result<(), String
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let work_dir = std::env::temp_dir().join(format!("oc-claw-update-{stamp}"));
+    let work_dir = std::env::temp_dir().join(format!("cc-claw-update-{stamp}"));
     std::fs::create_dir_all(&work_dir).map_err(|e| format!("failed to create temp dir: {e}"))?;
 
     // Determine installer file extension based on URL and platform
     #[cfg(target_os = "macos")]
-    let installer_filename = "oc-claw-update.dmg";
+    let installer_filename = "cc-claw-update.dmg";
     #[cfg(target_os = "windows")]
-    let installer_filename = if dmg_url.ends_with(".msi") { "oc-claw-update.msi" } else { "oc-claw-update.exe" };
+    let installer_filename = if dmg_url.ends_with(".msi") { "cc-claw-update.msi" } else { "cc-claw-update.exe" };
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let installer_filename = "oc-claw-update";
+    let installer_filename = "cc-claw-update";
 
     let dmg_path = work_dir.join(installer_filename);
     #[cfg(target_os = "macos")]
@@ -9767,7 +9767,7 @@ async fn run_update(app: tauri::AppHandle, dmg_url: String) -> Result<(), String
         let script = format!(r#"#!/bin/bash
 set -euo pipefail
 PID="{pid}"
-APP_BUNDLE="/Applications/oc-claw.app"
+APP_BUNDLE="/Applications/cc-claw.app"
 DMG_PATH="{dmg_path}"
 LOG_PATH="{log_path}"
 MOUNT_POINT=""
@@ -9895,7 +9895,7 @@ if ($installerPath.EndsWith('.msi')) {{
         'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
     )) {{
         $entry = Get-ItemProperty $regPath -ErrorAction SilentlyContinue |
-            Where-Object {{ $_.DisplayName -eq 'oc-claw' }} | Select-Object -First 1
+            Where-Object {{ $_.DisplayName -eq 'cc-claw' }} | Select-Object -First 1
         if ($entry -and $entry.InstallLocation) {{
             $installDir = $entry.InstallLocation.Trim('"')
             break
@@ -9914,17 +9914,17 @@ if ($installerPath.EndsWith('.msi')) {{
 
 Log "Launching updated app"
 # Find install location from registry (user may have chosen a custom path).
-# The executable is named oc_claw.exe (productName config produces this binary name).
+# The executable is named cc_claw.exe (productName config produces this binary name).
 $appPath = $null
 foreach ($regPath in @(
     'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
     'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
 )) {{
     $entry = Get-ItemProperty $regPath -ErrorAction SilentlyContinue |
-        Where-Object {{ $_.DisplayName -eq 'oc-claw' }} | Select-Object -First 1
+        Where-Object {{ $_.DisplayName -eq 'cc-claw' }} | Select-Object -First 1
     if ($entry -and $entry.InstallLocation) {{
         $loc = $entry.InstallLocation.Trim('"')
-        $candidate = Join-Path $loc 'oc_claw.exe'
+        $candidate = Join-Path $loc 'cc_claw.exe'
         if (Test-Path $candidate) {{
             $appPath = $candidate
             break
@@ -9933,8 +9933,8 @@ foreach ($regPath in @(
 }}
 if (-not $appPath) {{
     # Fallback: check common locations
-    foreach ($dir in @("$env:LOCALAPPDATA\oc-claw", "$env:ProgramFiles\oc-claw", "H:\oc-claw")) {{
-        $candidate = Join-Path $dir 'oc_claw.exe'
+    foreach ($dir in @("$env:LOCALAPPDATA\cc-claw", "$env:ProgramFiles\cc-claw", "H:\cc-claw")) {{
+        $candidate = Join-Path $dir 'cc_claw.exe'
         if (Test-Path $candidate) {{ $appPath = $candidate; break }}
     }}
 }}
@@ -9942,7 +9942,7 @@ if ($appPath) {{
     Log "Relaunching from $appPath"
     Start-Process $appPath
 }} else {{
-    Log "Warning: could not find oc_claw.exe to relaunch"
+    Log "Warning: could not find cc_claw.exe to relaunch"
 }}
 "#,
             pid = std::process::id(),
@@ -10070,15 +10070,15 @@ async fn install_claude_hooks() -> Result<(), String> {
 
     // Write hook script — platform-specific
     #[cfg(unix)]
-    let hook_path = hooks_dir.join("ooclaw-hook.sh");
+    let hook_path = hooks_dir.join("ccclaw-hook.sh");
     #[cfg(windows)]
-    let hook_path = hooks_dir.join("ooclaw-hook.ps1");
+    let hook_path = hooks_dir.join("ccclaw-hook.ps1");
 
     #[cfg(unix)]
     {
         let hook_script = r#"#!/bin/bash
-# ooclaw Claude Code hook - forwards events to /tmp/ooclaw-claude.sock
-SOCKET_PATH="/tmp/ooclaw-claude.sock"
+# ccclaw Claude Code hook - forwards events to /tmp/ccclaw-claude.sock
+SOCKET_PATH="/tmp/ccclaw-claude.sock"
 [ -S "$SOCKET_PATH" ] || exit 0
 
 # Detect non-interactive (claude -p / --print) sessions
@@ -10091,7 +10091,7 @@ for CHECK_PID in $PPID $(ps -o ppid= -p $PPID 2>/dev/null | tr -d ' '); do
 done
 export OOCLAW_INTERACTIVE=$IS_INTERACTIVE
 # $PPID is the PID of the process that spawned this bash (i.e. Claude Code).
-# Forwarded to oc-claw so it can detect when CC exits (Ctrl+C / SIGKILL)
+# Forwarded to cc-claw so it can detect when CC exits (Ctrl+C / SIGKILL)
 # and clear stale "waiting" sessions.
 export CC_PID=$PPID
 
@@ -10109,7 +10109,7 @@ case "$_PARENT_EXE" in
         GHOSTTY_TID=""
         ;;
     *)
-        _TID_CACHE="/tmp/ooclaw-tid-$PPID"
+        _TID_CACHE="/tmp/ccclaw-tid-$PPID"
         if [ -f "$_TID_CACHE" ]; then
             export GHOSTTY_TID=$(cat "$_TID_CACHE" 2>/dev/null)
         else
@@ -10250,7 +10250,7 @@ try {
     # CC Desktop bundles its CLI under a `claude-3p\claude-code` directory,
     # and the desktop Electron app lives in `WindowsApps\...\claude.exe`.
     # We treat either marker as 'desktop'. The first claude.exe encountered
-    # going upward is the CC CLI process; its PID lets oc-claw run PID-alive
+    # going upward is the CC CLI process; its PID lets cc-claw run PID-alive
     # checks (and a deeper parent walk via Win32) to clear stale sessions.
     $ccDesktop = $false
     $ccPid = 0
@@ -10347,7 +10347,7 @@ try {
     // Detect both old (.cmd path) and new (powershell.exe ... .ps1) hook entries for cleanup
     let has_our_hook = |entry: &serde_json::Value| -> bool {
         let is_ours = |cmd: &str| -> bool {
-            cmd == hook_path_str || cmd.contains("ooclaw-hook")
+            cmd == hook_path_str || cmd.contains("ccclaw-hook")
         };
         entry.get("command").and_then(|c| c.as_str()).map_or(false, |c| is_ours(c))
         || entry.get("hooks").and_then(|hs| hs.as_array()).map_or(false, |hs| {
@@ -10382,16 +10382,16 @@ async fn install_codex_hooks() -> Result<(), String> {
 
     // Codex support is dropped on Windows. Same as the cursor branch above:
     // proactively delete any previously-installed hook script and strip our
-    // entries from hooks.json so the codex CLI cannot reach the oc-claw
+    // entries from hooks.json so the codex CLI cannot reach the cc-claw
     // socket on this machine anymore.
     #[cfg(windows)]
     {
-        let _ = std::fs::remove_file(hooks_dir.join("ooclaw-codex-hook.ps1"));
+        let _ = std::fs::remove_file(hooks_dir.join("ccclaw-codex-hook.ps1"));
         // Codex's home is conventionally `.codex` on Windows but the install
         // path used `.Codex` historically — the file system is case-
         // insensitive so we clean the same dir, but also catch the
         // lowercase variant explicitly in case both ever exist.
-        let alt = home.join(".codex").join("hooks").join("ooclaw-codex-hook.ps1");
+        let alt = home.join(".codex").join("hooks").join("ccclaw-codex-hook.ps1");
         if alt.exists() {
             let _ = std::fs::remove_file(&alt);
         }
@@ -10405,12 +10405,12 @@ async fn install_codex_hooks() -> Result<(), String> {
                     if let Some(arr) = hooks.get_mut(&name).and_then(|v| v.as_array_mut()) {
                         arr.retain(|entry| {
                             let cmd_match = entry.get("command").and_then(|c| c.as_str())
-                                .map(|c| c.contains("ooclaw-codex-hook"))
+                                .map(|c| c.contains("ccclaw-codex-hook"))
                                 .unwrap_or(false);
                             let nested_match = entry.get("hooks").and_then(|hs| hs.as_array())
                                 .map(|hs| hs.iter().any(|inner| {
                                     inner.get("command").and_then(|c| c.as_str())
-                                        .map(|c| c.contains("ooclaw-codex-hook"))
+                                        .map(|c| c.contains("ccclaw-codex-hook"))
                                         .unwrap_or(false)
                                 }))
                                 .unwrap_or(false);
@@ -10434,21 +10434,21 @@ async fn install_codex_hooks() -> Result<(), String> {
     std::fs::create_dir_all(&hooks_dir).map_err(|e| e.to_string())?;
 
     #[cfg(unix)]
-    let hook_path = hooks_dir.join("ooclaw-codex-hook.sh");
+    let hook_path = hooks_dir.join("ccclaw-codex-hook.sh");
     #[cfg(windows)]
-    let hook_path = hooks_dir.join("ooclaw-codex-hook.ps1");
+    let hook_path = hooks_dir.join("ccclaw-codex-hook.ps1");
 
     #[cfg(unix)]
     {
         let hook_script = r#"#!/bin/bash
-# ooclaw Codex hook - forwards events to /tmp/ooclaw-claude.sock
-SOCKET_PATH="/tmp/ooclaw-claude.sock"
+# ccclaw Codex hook - forwards events to /tmp/ccclaw-claude.sock
+SOCKET_PATH="/tmp/ccclaw-claude.sock"
 [ -S "$SOCKET_PATH" ] || { echo '{}'; exit 0; }
 export CC_PID=$PPID
 
 # Capture Ghostty terminal ID once per Codex process so stop-time active-tab
 # checks and click-to-jump can target the exact tab.
-_TID_CACHE="/tmp/ooclaw-tid-$PPID"
+_TID_CACHE="/tmp/ccclaw-tid-$PPID"
 if [ -f "$_TID_CACHE" ]; then
     export GHOSTTY_TID=$(cat "$_TID_CACHE" 2>/dev/null)
 else
@@ -10540,7 +10540,7 @@ except:
     #[cfg(windows)]
     {
         // On Windows, keep the hook simple: forward Codex JSON to the existing
-        // oc-claw TCP hook server. `process_claude_event` handles both Codex
+        // cc-claw TCP hook server. `process_claude_event` handles both Codex
         // and Claude field variants.
         let ps1_script = r#"$ErrorActionPreference = 'SilentlyContinue'
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
@@ -10611,7 +10611,7 @@ try {
 
     let has_our_hook = |entry: &serde_json::Value| -> bool {
         let is_ours = |cmd: &str| -> bool {
-            cmd == hook_command || cmd.contains("ooclaw-codex-hook")
+            cmd == hook_command || cmd.contains("ccclaw-codex-hook")
         };
         entry.get("command").and_then(|c| c.as_str()).map_or(false, |c| is_ours(c))
             || entry.get("hooks").and_then(|hs| hs.as_array()).map_or(false, |hs| {
@@ -11191,7 +11191,7 @@ fn process_claude_event(
                 if hook_event == "Stop" {
                     let interrupted = stop_event_was_interrupted(&event, &session.source, &claude_status);
                     // CC: check if the user is looking at this session's Ghostty tab
-                    // Cursor: check if Cursor (or oc-claw) is the frontmost app.
+                    // Cursor: check if Cursor (or cc-claw) is the frontmost app.
                     // If a terminal ID is missing (older hooks / non-Ghostty),
                     // fall back to host-terminal checks where available.
                     let frontmost = get_frontmost_app_name();
@@ -11626,13 +11626,13 @@ try {
 
     log::info!("[cursor_hooks] installed hooks to {:?}", hooks_json_path);
 
-    // ── Sync oc-claw terminal-focus extension for Cursor ──
+    // ── Sync cc-claw terminal-focus extension for Cursor ──
     // The extension exposes a tiny localhost API per Cursor window:
     // - GET  /window-meta  → workspace roots + focus state + bound port
     // - POST /focus-window → surface that specific Cursor window
     // We intentionally overwrite the installed files on every startup so
     // extension changes take effect after the user reloads Cursor windows.
-    let ext_id = "oc-claw.terminal-focus";
+    let ext_id = "cc-claw.terminal-focus";
     let ext_dir = home.join(".cursor").join("extensions").join(format!("{}-1.0.0", ext_id));
     log::info!("[cursor_hooks] syncing terminal-focus extension...");
 
@@ -11873,7 +11873,7 @@ fn start_cursor_socket_server(
 }
 
 /// Start the Claude IPC server.
-/// On macOS/Linux: Unix domain socket at /tmp/ooclaw-claude.sock
+/// On macOS/Linux: Unix domain socket at /tmp/ccclaw-claude.sock
 /// On Windows: TCP server on localhost:19283
 fn start_claude_socket_server(
     claude_state: Arc<Mutex<HashMap<String, ClaudeSession>>>,
@@ -11886,7 +11886,7 @@ fn start_claude_socket_server(
         let pending = pending_permissions;
         let app = app_handle;
         std::thread::spawn(move || {
-            let sock_path = "/tmp/ooclaw-claude.sock";
+            let sock_path = "/tmp/ccclaw-claude.sock";
             let _ = std::fs::remove_file(sock_path);
 
             let listener = match std::os::unix::net::UnixListener::bind(sock_path) {
@@ -12326,8 +12326,8 @@ pub fn run() {
 
             // One log file per app run, named with a startup timestamp so we
             // never lose the previous session's logs to rotation. Goes to the
-            // OS-standard logs dir alongside the rolling `oc-claw.log`.
-            // On Windows: %LOCALAPPDATA%\com.openclaw.ooclaw\logs\run-*.log
+            // OS-standard logs dir alongside the rolling `cc-claw.log`.
+            // On Windows: %LOCALAPPDATA%\com.openclaw.ccclaw\logs\run-*.log
             //
             // Drop the default Stdout target — `pnpm tauri dev` would
             // otherwise mirror every log line into the terminal, drowning
@@ -12560,7 +12560,7 @@ pub fn run() {
                 if let Some(ref sp) = store_path {
                     if let Ok(data) = std::fs::read_to_string(sp) {
                         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&data) {
-                            lang = val.get("oc-claw-lang").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            lang = val.get("cc-claw-lang").and_then(|v| v.as_str()).map(|s| s.to_string());
                         }
                     }
                 }

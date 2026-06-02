@@ -125,33 +125,6 @@ export async function setActiveCharacter(name: string) {
   await emit('character-changed')
 }
 
-/** Load OC connections, migrating from old single-connection format if needed. */
-export async function loadOcConnections(): Promise<OcConnection[]> {
-  const store = await getStore()
-  const existing = await store.get('oc_connections') as OcConnection[] | null
-  if (existing) return existing
-
-  // Migrate from old format
-  const mode = ((await store.get('oc_mode')) as string) || 'local'
-  const host = ((await store.get('ssh_host')) as string) || ''
-  const user = ((await store.get('ssh_user')) as string) || ''
-  const connections: OcConnection[] = []
-  if (mode === 'remote' && host && user) {
-    connections.push({ id: crypto.randomUUID(), type: 'remote', host, user })
-  } else {
-    connections.push({ id: crypto.randomUUID(), type: 'local' })
-  }
-  await store.set('oc_connections', connections)
-  await store.save()
-  return connections
-}
-
-export async function saveOcConnections(connections: OcConnection[]) {
-  const store = await getStore()
-  await store.set('oc_connections', connections)
-  await store.save()
-}
-
 export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

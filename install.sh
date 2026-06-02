@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-REPO="rainnoon/oc-claw"
-APP_NAME="oc-claw"
+REPO="yeshen112/cc-claw"
+APP_NAME="cc-claw"
 INSTALL_DIR="/Applications"
 
 echo "Installing ${APP_NAME}..."

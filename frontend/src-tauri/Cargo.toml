@@ -1,5 +1,5 @@
 [package]
-name = "oc_claw"
+name = "cc_claw"
 version = "1.8.4"
 description = "OpenClaw Desktop Pet"
 authors = ["you"]

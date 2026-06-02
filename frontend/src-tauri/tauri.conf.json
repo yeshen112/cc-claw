@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "oc-claw",
+  "productName": "cc-claw",
   "version": "1.8.4",
-  "identifier": "com.openclaw.ooclaw",
+  "identifier": "com.openclaw.ccclaw",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5222",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "mini",
-        "title": "oc-claw Mini",
+        "title": "cc-claw Mini",
         "width": 60,
         "height": 45,
         "x": -9999,
@@ -60,8 +60,7 @@
       }
     },
     "resources": {
-      "../public/assets": "assets/",
-      "../../extensions/cursor": "extensions/cursor/"
+      "../public/assets": "assets/"
     }
   }
 }

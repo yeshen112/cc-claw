@@ -170,7 +170,7 @@
 
     "system": "系统",
     "autostart": "开机启动",
-    "autostartDesc": "登录系统后自动启动 oc-claw",
+    "autostartDesc": "登录系统后自动启动 cc-claw",
     "autostartFailed": "设置失败：",
 
     "about": "关于",

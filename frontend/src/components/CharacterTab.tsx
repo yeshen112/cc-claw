@@ -57,7 +57,7 @@ export function CharacterTab({ activeTab }: { activeTab: 'pet' | 'mini' }) {
     const store = await getStore()
     await store.set('tracked_agent', agentId)
     await store.save()
-    localStorage.setItem('ooclaw_tracked_agent', agentId)
+    localStorage.setItem('ccclaw_tracked_agent', agentId)
   }
 
   const handleDelete = async (name: string) => {
