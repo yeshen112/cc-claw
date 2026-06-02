@@ -41,7 +41,7 @@ function CopyCode({ text }: { text: string }) {
   )
 }
 
-export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, onToggleWaitingSound, soundEnabled, onToggleSoundEnabled, codexSoundEnabled, onToggleCodexSoundEnabled, cursorSoundEnabled, onToggleCursorSoundEnabled, autoCloseCompletion, onToggleAutoCloseCompletion, autoExpandOnTask, onToggleAutoExpandOnTask, islandBg, onChangeIslandBg, bgPos, onChangeBgPos, panelMaxHeight, onChangePanelMaxHeight, hoverDelay, onChangeHoverDelay, largeMascotScale, onChangeLargeMascotScale, appMode, onChangeAppMode, petSfxEnabled, onTogglePetSfxEnabled, petIdleIntervalMin, onChangePetIdleIntervalMin }: { notifySound: 'default' | 'manbo'; onChangeNotifySound: (v: 'default' | 'manbo') => void; waitingSound: boolean; onToggleWaitingSound: (v: boolean) => void; soundEnabled: boolean; onToggleSoundEnabled: (v: boolean) => void; codexSoundEnabled: boolean; onToggleCodexSoundEnabled: (v: boolean) => void; cursorSoundEnabled: boolean; onToggleCursorSoundEnabled: (v: boolean) => void; autoCloseCompletion: boolean; onToggleAutoCloseCompletion: (v: boolean) => void; autoExpandOnTask: boolean; onToggleAutoExpandOnTask: (v: boolean) => void; islandBg: string; onChangeIslandBg: (v: string) => void; bgPos: { x: number; y: number }; onChangeBgPos: (v: { x: number; y: number }) => void; panelMaxHeight: number; onChangePanelMaxHeight: (v: number) => void; hoverDelay: number; onChangeHoverDelay: (v: number) => void; largeMascotScale: number; onChangeLargeMascotScale: (v: number) => void; appMode?: 'coding' | 'pet' | null; onChangeAppMode?: (v: 'coding' | 'pet') => void; petSfxEnabled?: boolean; onTogglePetSfxEnabled?: (v: boolean) => void; petIdleIntervalMin?: number; onChangePetIdleIntervalMin?: (v: number) => void }) {
+export function SettingsTab({ notifySound, onChangeNotifySound, customSoundPath, onPickCustomSound, waitingSound, onToggleWaitingSound, soundEnabled, onToggleSoundEnabled, codexSoundEnabled, onToggleCodexSoundEnabled, cursorSoundEnabled, onToggleCursorSoundEnabled, autoCloseCompletion, onToggleAutoCloseCompletion, autoExpandOnTask, onToggleAutoExpandOnTask, islandBg, onChangeIslandBg, bgPos, onChangeBgPos, panelMaxHeight, onChangePanelMaxHeight, hoverDelay, onChangeHoverDelay, largeMascotScale, onChangeLargeMascotScale, appMode, onChangeAppMode, petSfxEnabled, onTogglePetSfxEnabled, petIdleIntervalMin, onChangePetIdleIntervalMin }: { notifySound: 'default' | 'manbo' | 'custom'; onChangeNotifySound: (v: 'default' | 'manbo' | 'custom') => void; customSoundPath?: string; onPickCustomSound: () => void; waitingSound: boolean; onToggleWaitingSound: (v: boolean) => void; soundEnabled: boolean; onToggleSoundEnabled: (v: boolean) => void; codexSoundEnabled: boolean; onToggleCodexSoundEnabled: (v: boolean) => void; cursorSoundEnabled: boolean; onToggleCursorSoundEnabled: (v: boolean) => void; autoCloseCompletion: boolean; onToggleAutoCloseCompletion: (v: boolean) => void; autoExpandOnTask: boolean; onToggleAutoExpandOnTask: (v: boolean) => void; islandBg: string; onChangeIslandBg: (v: string) => void; bgPos: { x: number; y: number }; onChangeBgPos: (v: { x: number; y: number }) => void; panelMaxHeight: number; onChangePanelMaxHeight: (v: number) => void; hoverDelay: number; onChangeHoverDelay: (v: number) => void; largeMascotScale: number; onChangeLargeMascotScale: (v: number) => void; appMode?: 'coding' | 'pet' | null; onChangeAppMode?: (v: 'coding' | 'pet') => void; petSfxEnabled?: boolean; onTogglePetSfxEnabled?: (v: boolean) => void; petIdleIntervalMin?: number; onChangePetIdleIntervalMin?: (v: number) => void }) {
   const { t, i18n } = useTranslation()
   const isWindowsPlatform = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows')
   const [enableClaudeCode, setEnableClaudeCode] = useState(true)
@@ -456,16 +456,35 @@ export function SettingsTab({ notifySound, onChangeNotifySound, waitingSound, on
               <span className="text-sm font-medium text-white/90">{t('settings.completionSound')}</span>
               <span className="text-xs text-white/40">{t('settings.completionSoundDesc')}</span>
             </div>
-            <div className="flex bg-black/50 p-0.5 rounded-lg border border-white/5">
-              {(['default', 'manbo'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => onChangeNotifySound(s)}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${notifySound === s ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'}`}
-                >
-                  {s === 'default' ? t('settings.defaultSound') : t('settings.manboSound')}
-                </button>
-              ))}
+            <div className="flex flex-col gap-2">
+              <div className="flex bg-black/50 p-0.5 rounded-lg border border-white/5">
+                {(['default', 'manbo', 'custom'] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => onChangeNotifySound(s)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${notifySound === s ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'}`}
+                  >
+                    {s === 'default' ? t('settings.defaultSound') : s === 'manbo' ? t('settings.manboSound') : t('settings.customSound')}
+                  </button>
+                ))}
+              </div>
+              {notifySound === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={onPickCustomSound}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-colors border border-white/10"
+                  >
+                    {t('settings.pickSoundFile')}
+                  </button>
+                  {customSoundPath ? (
+                    <span className="text-xs text-white/50 truncate max-w-[180px]" title={customSoundPath}>
+                      {customSoundPath.split(/[/\\]/).pop()}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-white/30">{t('settings.noSoundSelected')}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-between p-4 border-b border-white/5">

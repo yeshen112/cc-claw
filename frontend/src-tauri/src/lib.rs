@@ -6606,6 +6606,63 @@ async fn play_sound(name: String) -> Result<(), String> {
     Ok(())
 }
 
+// ─── Pick custom sound file via native file dialog ───
+/// Opens a native file picker dialog filtered to common audio formats.
+/// Returns the absolute file path or `null` if the user cancelled.
+#[tauri::command]
+async fn pick_custom_sound_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri::Manager;
+    use tauri_plugin_dialog::DialogExt;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut builder = app
+        .dialog()
+        .file()
+        .set_title("选择提示音文件")
+        .add_filter("音频文件", &["mp3", "wav", "m4a", "ogg", "flac", "aac", "wma"]);
+    if let Some(win) = app.get_webview_window("mini") {
+        builder = builder.set_parent(&win);
+    }
+    builder.pick_file(move |path| {
+        let _ = tx.send(path);
+    });
+    let picked = rx.await.map_err(|e| e.to_string())?;
+    let result = picked
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned());
+
+    // Re-assert always-on-top after the dialog steals focus.
+    reassert_mini_floating(&app);
+    Ok(result)
+}
+
+// ─── Play custom sound file (returns base64 data URL for frontend playback) ───
+/// Reads the given audio file and returns it as a base64-encoded data URL.
+/// The frontend plays it via `new Audio(dataUrl).play()`, which supports
+/// all common audio formats cross-platform (unlike Windows PlaySoundW which
+/// is limited to WAV files).
+#[tauri::command]
+async fn play_file_sound(path: String) -> Result<String, String> {
+    let data = std::fs::read(&path)
+        .map_err(|e| format!("无法读取音频文件: {}", e))?;
+    let mime = guess_audio_mime(&path);
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
+/// Map a file extension to an audio MIME type for the data URL.
+fn guess_audio_mime(path: &str) -> &'static str {
+    let lower = path.to_lowercase();
+    if lower.ends_with(".mp3") { return "audio/mpeg"; }
+    if lower.ends_with(".wav") { return "audio/wav"; }
+    if lower.ends_with(".m4a") { return "audio/mp4"; }
+    if lower.ends_with(".aac") { return "audio/aac"; }
+    if lower.ends_with(".ogg") { return "audio/ogg"; }
+    if lower.ends_with(".flac") { return "audio/flac"; }
+    if lower.ends_with(".wma") { return "audio/x-ms-wma"; }
+    "audio/mpeg" // fallback — most common audio format
+}
+
 // ─── Claude Code session state ───
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -12032,7 +12089,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_status, send_chat, open_detail_panel, save_character_gif, delete_character_assets, delete_character_gif, get_agents, get_health, get_agent_metrics, interrupt_agent, scan_characters, get_agent_extra_info, open_mini, close_mini, set_mini_expanded, set_mini_size, set_efficiency_hover_tracking, resize_mini_height, move_mini_by, get_mini_origin, get_mini_monitor_rect, set_mini_origin, set_ime_mode, get_agent_sessions, get_session_preview, get_session_messages, get_active_sessions, proxy_post, play_sound, get_claude_sessions, get_claude_conversation, install_claude_hooks, install_cursor_hooks, remove_claude_session, resolve_claude_permission, get_claude_stats, open_url, activate_app, focus_cursor_terminal, check_ax_permission, request_ax_permission, jump_to_claude_terminal, close_ssh, read_local_file, list_backgrounds, save_background, get_background_data, exit_app, get_ssh_key_info, reset_ssh, get_ui_scale, list_custom_codex_pets, open_codex_pets_dir, import_codex_pet, pick_codex_pet_folder, reassert_floating, debug_log, update_tray_language, set_pet_mode_window, set_pet_context_menu, set_pet_pomodoro_active, get_now_playing, get_system_idle_time])
+        .invoke_handler(tauri::generate_handler![get_status, send_chat, open_detail_panel, save_character_gif, delete_character_assets, delete_character_gif, get_agents, get_health, get_agent_metrics, interrupt_agent, scan_characters, get_agent_extra_info, open_mini, close_mini, set_mini_expanded, set_mini_size, set_efficiency_hover_tracking, resize_mini_height, move_mini_by, get_mini_origin, get_mini_monitor_rect, set_mini_origin, set_ime_mode, get_agent_sessions, get_session_preview, get_session_messages, get_active_sessions, proxy_post, play_sound, play_file_sound, pick_custom_sound_file, get_claude_sessions, get_claude_conversation, install_claude_hooks, install_cursor_hooks, remove_claude_session, resolve_claude_permission, get_claude_stats, open_url, activate_app, focus_cursor_terminal, check_ax_permission, request_ax_permission, jump_to_claude_terminal, close_ssh, read_local_file, list_backgrounds, save_background, get_background_data, exit_app, get_ssh_key_info, reset_ssh, get_ui_scale, list_custom_codex_pets, open_codex_pets_dir, import_codex_pet, pick_codex_pet_folder, reassert_floating, debug_log, update_tray_language, set_pet_mode_window, set_pet_context_menu, set_pet_pomodoro_active, get_now_playing, get_system_idle_time])
         .manage(ActiveAgentPid { pid: Mutex::new(None) })
         .manage(ClaudeState { sessions: Arc::new(Mutex::new(HashMap::new())), pending_permissions: Arc::new(Mutex::new(HashMap::new())) })
         .run(tauri::generate_context!())

@@ -474,7 +474,8 @@ export default function Mini() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [codexSoundEnabled, setCodexSoundEnabled] = useState(true)
   const [cursorSoundEnabled, setCursorSoundEnabled] = useState(false)
-  const [notifySound, setNotifySound] = useState<'default' | 'manbo'>('default')
+  const [notifySound, setNotifySound] = useState<'default' | 'manbo' | 'custom'>('default')
+  const [customSoundPath, setCustomSoundPath] = useState('')
   const [waitingSound, setWaitingSound] = useState(false)
   const [autoCloseCompletion, setAutoCloseCompletion] = useState(false)
   const [petSfxEnabled, setPetSfxEnabled] = useState(true)
@@ -1591,6 +1592,17 @@ export default function Mini() {
     }
   }, [])
 
+  const playCustomSound = useCallback(async (path: string) => {
+    if (!path) return
+    try {
+      const dataUrl: string = await invoke('play_file_sound', { path })
+      const audio = new Audio(dataUrl)
+      audio.play().catch(() => {})
+    } catch {
+      // File may have been deleted or is invalid — silently ignore
+    }
+  }, [])
+
   // ─── Character + config polling ───
   useEffect(() => {
     if (appMode !== 'coding') return
@@ -1631,7 +1643,9 @@ export default function Mini() {
       const csnd = await store.get('cursor_sound_enabled')
       if (typeof csnd === 'boolean') setCursorSoundEnabled(csnd)
       const ns = (await store.get('notify_sound')) as string
-      if (ns === 'default' || ns === 'manbo') setNotifySound(ns)
+      if (ns === 'default' || ns === 'manbo' || ns === 'custom') setNotifySound(ns)
+      const nsc = (await store.get('notify_sound_custom')) as string
+      if (typeof nsc === 'string' && nsc) setCustomSoundPath(nsc)
       const ws = await store.get('waiting_sound')
       if (typeof ws === 'boolean') setWaitingSound(ws)
       const acc = await store.get('auto_close_completion')
@@ -1790,6 +1804,8 @@ export default function Mini() {
   cursorSoundEnabledRef.current = cursorSoundEnabled
   const notifySoundRef = useRef(notifySound)
   notifySoundRef.current = notifySound
+  const customSoundPathRef = useRef(customSoundPath)
+  customSoundPathRef.current = customSoundPath
   const waitingSoundRef = useRef(waitingSound)
   waitingSoundRef.current = waitingSound
   const autoCloseCompletionRef = useRef(autoCloseCompletion)
@@ -1827,6 +1843,8 @@ export default function Mini() {
       if (ev.payload?.waiting && !waitingSoundRef.current) return
       if (notifySoundRef.current === 'manbo') {
         new Audio('/audio/manbo.m4a').play().catch(() => {})
+      } else if (notifySoundRef.current === 'custom') {
+        playCustomSound(customSoundPathRef.current)
       } else {
         playDefaultSound()
       }
@@ -3637,6 +3655,7 @@ export default function Mini() {
                   await store.save()
                   if (next) {
                     if (notifySound === 'manbo') new Audio('/audio/manbo.m4a').play().catch(() => {})
+                    else if (notifySound === 'custom') playCustomSound(customSoundPath)
                     else playDefaultSound()
                   }
                 }}
@@ -4808,6 +4827,22 @@ export default function Mini() {
                           const store = await getStore()
                           await store.set('notify_sound', v)
                           await store.save()
+                        }}
+                        customSoundPath={customSoundPath}
+                        onPickCustomSound={async () => {
+                          try {
+                            const path: string | null = await invoke('pick_custom_sound_file')
+                            if (path) {
+                              setCustomSoundPath(path)
+                              const store = await getStore()
+                              await store.set('notify_sound_custom', path)
+                              await store.save()
+                              // Preview the selected sound
+                              playCustomSound(path)
+                            }
+                          } catch {
+                            // user cancelled or dialog failed — ignore
+                          }
                         }}
                         soundEnabled={soundEnabled}
                         onToggleSoundEnabled={async (v) => {
