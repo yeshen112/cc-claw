@@ -13,8 +13,7 @@ import { PetContextMenu, PomodoroOverlay } from './components/PetContextMenu'
 import {
   type AppMode, type PetData, type PetAction, type PomodoroState,
   loadAppMode, saveAppMode, loadPetData, savePetData, tickPetData,
-  loadAppModeVersion, saveAppModeVersion, isAppModeOnboardingStale,
-  APP_MODE_ONBOARDING_VERSION,
+  loadAppModeVersion, saveAppModeVersion,
   defaultPetData, getAffectionTier, canWalk,
   POMODORO_COINS_PER_MIN, AFFECTION_ACTIVITY_PER_10MIN, AFFECTION_MAX,
   HUNGER_ACTIVITY_PER_HOUR, HUNGER_OFFLINE_FLOOR,
@@ -587,7 +586,6 @@ export default function Mini() {
   // ─── Pet / Nurture mode state ───
   const [appMode, setAppMode] = useState<AppMode | null>(null)
   const appModeRef = useRef<AppMode | null>(null)
-  const [showOnboarding, setShowOnboarding] = useState(false)
   const [petData, setPetData] = useState<PetData>(defaultPetData())
   const petDataRef = useRef<PetData>(defaultPetData())
   petDataRef.current = petData
@@ -688,37 +686,6 @@ export default function Mini() {
   }
 
   const { t, i18n } = useTranslation()
-  // ─── Stub types (UpdateModal removed) ───
-type UpdateModalInfo = { hasUpdate?: boolean; latest?: string; url?: string }
-type UpdateModalPhase = 'available' | 'downloading' | 'ready_to_restart'
-interface UpdateProgressPayload { stage?: string; progress?: number | null }
-type OcConnection = { id: string; type: 'local' | 'remote'; host?: string; user?: string }
-type AgentMetrics = Record<string, unknown>
-const loadOcConnections = async (): Promise<OcConnection[]> => []
-const saveOcConnections = async (_: OcConnection[]) => {}
-  // ─── Update modal stubs (always closed) ───
-  const updateModalOpen = false
-  const updateModalOpenRef = useRef(false)
-  const pendingUpdateInfoRef = useRef<UpdateModalInfo | null>(null)
-  const updateModalRunOwnedRef = useRef(false)
-  const updateModalPhase: UpdateModalPhase = 'available'
-  const updateModalInfo: UpdateModalInfo | null = null
-  const updateModalProgress: number | null = null
-  const updateModalProgressStage = 'preparing'
-  const updateModalWindowAdjustedRef = useRef(false)
-  const updateModalPrevExpandedRef = useRef(false)
-  const setUpdateModalOpen = (_v: boolean) => {}
-  const setUpdateModalPhase = (_v: UpdateModalPhase) => {}
-  const setUpdateModalInfo = (_v: UpdateModalInfo | null) => {}
-  const setUpdateModalProgress = (_v: number | null) => {}
-  const setUpdateModalProgressStage = (_v: string) => {}
-  const ensureUpdateModalWindow = async () => {}
-  const restoreWindowAfterUpdateModal = async () => {}
-  const openAvailableUpdateModal = async (_info: UpdateModalInfo) => {}
-  const closeUpdateModal = () => {}
-  const skipCurrentUpdateVersion = async () => {}
-  const runUpdateFromModal = async () => {}
-  const restartFromModal = () => {}
   // URL is sourced from `ui.petdex.url`. We deliberately do NOT fall
   // back to a hardcoded value — when the fetch fails or the field is
   // missing, PetPicker shows a "network error" message so users
@@ -1103,7 +1070,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       expanded ||
       showSettingsOverlay ||
       updateModalOpen ||
-      showOnboarding ||
       isCreateModalOpen
     ) {
       setWalkFlipped(false)
@@ -1228,7 +1194,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
     expanded,
     showSettingsOverlay,
     updateModalOpen,
-    showOnboarding,
     isCreateModalOpen,
     updateWalkDir,
   ])
@@ -1292,7 +1257,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       // when the user closes the panel.
       if (settingsModeRef.current || settingsTransitioningRef.current) {
         setAppMode(mode)
-        setShowOnboarding(false)
         setLargeMascot(true)
         setPetData(ticked)
         return
@@ -1304,7 +1268,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       await invoke('set_mini_expanded', { expanded: false, position: mascotPositionRef.current, efficiency: true, mascotScale: mascotScaleRef.current, largeMascot: true, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
       await invoke('set_pet_mode_window', { active: true, mascotScale: mascotScaleRef.current, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
       setAppMode(mode)
-      setShowOnboarding(false)
       setLargeMascot(true)
       setPetData(ticked)
       // Wait for React to render the mascot and chroma key canvas to draw, then reveal.
@@ -1317,7 +1280,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       }
     } else {
       setAppMode(mode)
-      setShowOnboarding(false)
       // First time entering coding mode (no persisted preference): default
       // to the large mascot so new users see it out of the box. Existing
       // users who have explicitly toggled the size are left alone.
@@ -1565,7 +1527,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       const mode = (existingMode === 'pet' || existingMode === 'coding') ? existingMode : 'coding'
       setAppMode(mode)
       appModeRef.current = mode
-      setShowOnboarding(false)
       void (async () => {
         await saveAppMode(mode)
         await saveAppModeVersion(APP_MODE_ONBOARDING_VERSION)
@@ -1795,7 +1756,7 @@ const saveOcConnections = async (_: OcConnection[]) => {}
             // Only auto-expand if tab not active and panel is collapsed
             if (
               autoExpandOnTaskRef.current &&
-              !updateModalOpenRef.current &&
+              ! &&
               !s.isActiveTab &&
               viewModeRef.current === 'efficiency' &&
               !expandedRef.current &&
@@ -2540,7 +2501,7 @@ const saveOcConnections = async (_: OcConnection[]) => {}
   useEffect(() => {
     if (appMode === 'pet') {
       invoke('set_efficiency_hover_tracking', { active: false }).catch(() => {})
-    } else if (viewMode === 'efficiency' && !moveMode && !updateModalOpen && !settingsMode && !settingsTransitioning) {
+    } else if (viewMode === 'efficiency' && !moveMode && !settingsMode && !settingsTransitioning) {
       invoke('set_efficiency_hover_tracking', { active: true }).catch(() => {})
     } else {
       invoke('set_efficiency_hover_tracking', { active: false }).catch(() => {})
@@ -2548,7 +2509,7 @@ const saveOcConnections = async (_: OcConnection[]) => {}
     return () => {
       invoke('set_efficiency_hover_tracking', { active: false }).catch(() => {})
     }
-  }, [viewMode, moveMode, updateModalOpen, settingsMode, settingsTransitioning, appMode])
+  }, [viewMode, moveMode, settingsMode, settingsTransitioning, appMode])
 
   // Bridge the Rust cursor poll's `mini-mascot-hover` event to local state
   // so the codex sprite can play its jump animation on hover even before
@@ -2606,13 +2567,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
     if (viewMode !== 'efficiency' || appMode === 'pet') return
     const unlisten = listen<boolean>('efficiency-hover', (event) => {
       if (settingsModeRef.current || settingsTransitioningRef.current) {
-        return
-      }
-      if (updateModalOpenRef.current) {
-        if (hoverCloseTimerRef.current) {
-          clearTimeout(hoverCloseTimerRef.current)
-          hoverCloseTimerRef.current = null
-        }
         return
       }
       if (event.payload) {
@@ -2787,7 +2741,7 @@ const saveOcConnections = async (_: OcConnection[]) => {}
 
   // Click outside to collapse (only when not pinned)
   useEffect(() => {
-    if (!expanded || pinned || settingsMode || settingsTransitioning || updateModalOpen) return
+    if (!expanded || pinned || settingsMode || settingsTransitioning ) return
     const onClick = (e: MouseEvent) => {
       if (isCreateModalOpenRef.current) return
       if (isSettingsPickerBlockingClose()) {
@@ -2801,7 +2755,7 @@ const saveOcConnections = async (_: OcConnection[]) => {}
     }
     window.addEventListener('mousedown', onClick)
     return () => window.removeEventListener('mousedown', onClick)
-  }, [expanded, pinned, settingsMode, settingsTransitioning, updateModalOpen, collapse, debugToTerminal, isSettingsPickerBlockingClose])
+  }, [expanded, pinned, settingsMode, settingsTransitioning, collapse, debugToTerminal, isSettingsPickerBlockingClose])
 
   // Window blur: collapse when user clicks outside the app (when not pinned, or in settings mode)
   // Skip blur when a file picker dialog is open
@@ -2877,10 +2831,10 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)
     }
-  }, [expanded, pinned, settingsMode, updateModalOpen, collapse, exitSettings, debugToTerminal, isSettingsPickerBlockingClose])
+  }, [expanded, pinned, settingsMode, collapse, exitSettings, debugToTerminal, isSettingsPickerBlockingClose])
 
   useEffect(() => {
-    if (expanded || moveMode || updateModalOpen) return
+    if (expanded || moveMode ) return
     // Auto-expand on window focus is Windows-only. macOS opens the panel
     // through the notch-hover poll, and clicking the mascot will focus the
     // mini window — auto-expanding here would re-introduce the popup that
@@ -2911,7 +2865,7 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       window.removeEventListener('focus', onFocus)
       cancelFocusExpand()
     }
-  }, [expanded, expand, moveMode, updateModalOpen, cancelFocusExpand])
+  }, [expanded, expand, moveMode, cancelFocusExpand])
 
   // Exit move mode when clicking outside mascot or when window loses focus.
   // Use a debounced blur so that programmatic window moves (which briefly
@@ -3216,12 +3170,12 @@ const saveOcConnections = async (_: OcConnection[]) => {}
   }, [expanded, settingsMode, settingsTransitioning, showPanel, uiScale, panelMaxHeight, inDetailPage, detailPageMaxHeight, pushMiniHeight, stopResizeTween, tweenMiniHeight])
 
   useEffect(() => {
-    if (!expanded || !showPanel || settingsMode || settingsTransitioning || updateModalOpen) return
+    if (!expanded || !showPanel || settingsMode || settingsTransitioning ) return
     if (expandedWindowModeRef.current === viewMode) return
     syncExpandedWindowLayout(viewMode).catch((e) => {
       console.warn('[mini] sync expanded window layout failed:', e)
     })
-  }, [expanded, showPanel, settingsMode, settingsTransitioning, updateModalOpen, viewMode, syncExpandedWindowLayout])
+  }, [expanded, showPanel, settingsMode, settingsTransitioning, viewMode, syncExpandedWindowLayout])
 
   const collapsedMascotSize = Math.round(MASCOT_BASE_SIZE * mascotScale)
   const collapsedPlaceholderRadius = Math.round(10 * mascotScale)
@@ -3295,7 +3249,6 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       }}
     >
       {/* Collapsed */}
-      {!expanded && !hiding && !updateModalOpen && !showOnboarding && (
         <div
           id="mini-panel"
           onMouseEnter={() => {
@@ -3585,7 +3538,7 @@ const saveOcConnections = async (_: OcConnection[]) => {}
       )}
 
       {/* Expanded panel */}
-      {expanded && !settingsMode && !settingsTransitioning && !updateModalOpen && (
+      {expanded && !settingsMode && !settingsTransitioning && (
         <div
           id="mini-panel"
           ref={panelRef}
