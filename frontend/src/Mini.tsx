@@ -1069,7 +1069,6 @@ export default function Mini() {
       settingsTransitioning ||
       expanded ||
       showSettingsOverlay ||
-      updateModalOpen ||
       isCreateModalOpen
     ) {
       setWalkFlipped(false)
@@ -1193,7 +1192,6 @@ export default function Mini() {
     settingsTransitioning,
     expanded,
     showSettingsOverlay,
-    updateModalOpen,
     isCreateModalOpen,
     updateWalkDir,
   ])
@@ -2759,7 +2757,6 @@ export default function Mini() {
   // Window blur: collapse when user clicks outside the app (when not pinned, or in settings mode)
   // Skip blur when a file picker dialog is open
   useEffect(() => {
-    if (updateModalOpen) return
     // In pet mode settings, expanded stays false; still need blur handling
     // so clicking desktop can close settings via exitSettings.
     if (!expanded && !settingsMode) return
