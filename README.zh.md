@@ -1,66 +1,36 @@
 <p align="center">
   <img src="icon.png" width="80" />
 </p>
-<h1 align="center">OC-Claw</h1>
+<h1 align="center">CC-Claw</h1>
 <p align="center">
-  <a href="https://www.oc-claw.ai"><img src="https://img.shields.io/badge/前往官网下载-oc--claw.ai-8A2BE2?style=for-the-badge" alt="Download" /></a>
-</p>
-<p align="center">
-  <a href="./README.md">English</a> | <b>中文</b> | <a href="./README.ja.md">日本語</a> | <a href="./README.ko.md">한국어</a> | <a href="./README.es.md">Español</a> | <a href="./README.fr.md">Français</a>
-</p>
-<p align="center">
-  桌面宠物应用，实时监控你的 AI 编程 agent 工作状态。支持 macOS 和 Windows。
-</p>
-
-<p align="center">
-  <b>编程模式</b><br/>
-  <sub>macOS：OpenClaw、Claude Code、Cursor、Codex</sub><br/>
-  <sub>Windows：OpenClaw、Claude Code、Cursor</sub>
-</p>
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/74b8bbf8-ddcf-4149-a91e-d18d5c24fec6" width="600" />
-</p>
-<p align="center">
-  <b>桌宠模式</b>
-</p>
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/2a143250-174a-406e-8a43-fd30db7ce071" width="600" />
+  实时监控 Claude Code 工作状态的桌面宠物。
 </p>
 
 ## 功能
 
-- 实时响应 OpenClaw / Claude Code / Codex / Cursor agent 活动状态（工作、空闲、等待）
-- 桌面宠物角色，工作时播放动画，休息时打盹（macOS 刘海或 Windows 任务栏）
-- 自动发现本地 OpenClaw agent，显示 session 列表、聊天记录、调用量/token 统计图表
-- 通过 Hook 监听本地 Claude Code、Codex 和 Cursor 会话，查看实时对话
-- 通过 SSH 连接远程服务器上的 OpenClaw 实例
-- 自定义角色动画，将不同 agent 配对不同角色
-- 可自定义岛屿背景，支持裁剪工具
-- 完成提示音 & 等待提示音
+- 🐱 动态桌面宠物，实时响应 Claude Code 的工作状态
+- 🟢 **工作中** — AI 思考或执行工具时播放工作动画
+- 😴 **空闲中** — Claude Code 无活动时宠物休息打盹
+- ⏳ **等待中** — Claude Code 需要确认权限时提醒你
+- 📋 可展开面板，查看会话列表和实时对话
+- 🎨 自定义角色动画和背景（GIF / 精灵图 / 视频）
+- 🔊 完成提示音 & 等待提示音
+- 🖥️ macOS 刘海岛和 Windows 任务栏定位
 
 ## 前置条件
 
 - macOS 或 Windows
-- 已安装 [OpenClaw](https://github.com/nicepkg/openclaw)、[Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Codex](https://github.com/openai/codex) 和/或 [Cursor](https://www.cursor.com)
+- 已安装 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
 ## 工作原理
 
 ```
-OpenClaw Agents ──→ JSONL session 文件 ──→ 健康轮询 ──→ 活动状态
-Claude Code     ──→ Hooks ──→ 事件解析 ──→ 活动状态
-Codex           ──→ Hooks ──→ 事件解析 ──→ 活动状态
-Cursor          ──→ Hooks ──→ 事件解析 ──→ 活动状态
-                                              ↓
-                          角色动画 ← 状态机 ← 提示音效
+Claude Code  ──→  Hooks  ──→  事件解析  ──→  活动状态
+                                                ↓
+                        角色动画  ←  状态机  ←  提示音效
 ```
 
-OC-Claw 通过轮询 OpenClaw session 文件检测 agent 活动，并通过安装的 Hook 监听 Claude Code、Codex 和 Cursor。活动状态驱动刘海岛屿上的角色动画，可展开面板查看 session 详情、聊天记录和统计数据。
-
-## 技术栈
-
-- **Tauri v2** + **React** + **TypeScript** — 前端
-- **Rust** — 后端，负责系统交互、SSH 隧道和 API 通信
-- macOS / Windows 原生 API 实现窗口管理与定位
+CC-Claw 通过安装 Claude Code Hook 实时接收会话事件，活动状态驱动桌面宠物的动画表现，可展开面板查看会话详情和对话预览。
 
 ## 开发
 
@@ -70,28 +40,16 @@ npm install
 npx tauri dev
 ```
 
-## 贡献
+## 技术栈
 
-欢迎提交 Bug 报告、功能建议和 Pull Request。
-
-## 友情链接
-
-感谢 [LINUX DO](https://linux.do/) 朋友们的支持与反馈。
+- **Tauri v2** + **React** + **TypeScript** — 前端
+- **Rust** — 系统交互、Hook 服务端、窗口管理
+- macOS / Windows 原生 API
 
 ## 致谢
 
-- [Notchi](https://github.com/sk-ruban/notchi) — 刘海伴侣概念和草地岛屿的设计灵感
-- [Vibe Island](https://github.com/vibeislandapp/vibe-island) — 交互设计参考
+基于 [oc-claw](https://github.com/rainnoon/oc-claw) 修改。设计灵感来自 [Notchi](https://github.com/sk-ruban/notchi)。
 
 ## 许可证
 
-MIT
-
----
-
-<p align="center">
-  <img src="assets/powered-by-kaon.png" height="28" />
-</p>
-<p align="center">
-  <sub>最初诞生于 KAON Hackathon</sub>
-</p>
+MIT — 详见 [LICENSE](LICENSE)。
