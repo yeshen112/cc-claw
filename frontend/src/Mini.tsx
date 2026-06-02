@@ -1756,7 +1756,6 @@ export default function Mini() {
             // Only auto-expand if tab not active and panel is collapsed
             if (
               autoExpandOnTaskRef.current &&
-              ! &&
               !s.isActiveTab &&
               viewModeRef.current === 'efficiency' &&
               !expandedRef.current &&
@@ -3272,6 +3271,7 @@ export default function Mini() {
             cursor: 'default',
           }}
         >
+          {!expanded && !hiding && (
           <div
             onPointerDown={handleMascotPointerDown}
             onContextMenu={handleMascotContextMenu}
