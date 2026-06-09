@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { load } from '@tauri-apps/plugin-store'
-import type { CharacterMeta, OcConnection } from './types'
+import type { CharacterMeta } from './types'
 
 export async function getStore() {
   return load('settings.json', { defaults: {}, autoSave: true })

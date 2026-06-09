@@ -15,6 +15,12 @@ export interface CharacterMeta {
   largeActions?: Record<string, string>
 }
 
+export interface AgentInfo {
+  id: string
+  identityName?: string
+  identityEmoji?: string
+}
+
 export interface PipelinePreset {
   id: string; name: string; description: string; promptFile: string
   cols: number; rows: number; needsRefImage: boolean

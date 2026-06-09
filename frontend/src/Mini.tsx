@@ -13,7 +13,7 @@ import { PetContextMenu, PomodoroOverlay } from './components/PetContextMenu'
 import {
   type AppMode, type PetData, type PetAction, type PomodoroState,
   loadAppMode, saveAppMode, loadPetData, savePetData, tickPetData,
-  loadAppModeVersion, saveAppModeVersion, isAppModeOnboardingStale,
+  loadAppModeVersion, saveAppModeVersion,
   APP_MODE_ONBOARDING_VERSION,
   defaultPetData, getAffectionTier, canWalk,
   POMODORO_COINS_PER_MIN, AFFECTION_ACTIVITY_PER_10MIN, AFFECTION_MAX,
@@ -49,16 +49,7 @@ interface AgentInfo {
   identityEmoji?: string
 }
 
-interface SessionHealthInfo {
-  key: string
-  active: boolean
-}
 
-interface AgentHealth {
-  agentId: string
-  active: boolean
-  sessions?: SessionHealthInfo[]
-}
 
 interface MiniSessionInfo {
   key: string
@@ -73,11 +64,6 @@ interface MiniSessionInfo {
   sessionFile?: string
 }
 
-interface SessionPreview {
-  active: boolean
-  lastUserMsg?: string
-  lastAssistantMsg?: string
-}
 
 interface SessionSlot {
   agentId: string
@@ -88,13 +74,6 @@ interface SessionSlot {
   petState?: PetState
 }
 
-interface UpdateProgressPayload {
-  stage: string
-  progress?: number | null
-  downloadedBytes?: number
-  totalBytes?: number | null
-  message?: string
-}
 
 const MAX_SLOTS = 10
 const MASCOT_SCALE_MIN = 1
@@ -323,11 +302,11 @@ export default function Mini() {
   // first clicks. The Rust side emits `mini-mascot-hover` whenever the
   // cursor enters/leaves the collapsed mascot's window rect.
   const [mascotHover, setMascotHover] = useState(false)
-  const [agents, setAgents] = useState<AgentInfo[]>([])
-  const [hasConfiguredOpenClaw, setHasConfiguredOpenClaw] = useState(false)
-  const [healthMap, setHealthMap] = useState<Record<string, boolean>>({})
+  const [agents, _setAgents] = useState<AgentInfo[]>([])
+  const [hasConfiguredOpenClaw, _setHasConfiguredOpenClaw] = useState(false)
+  const [healthMap, _setHealthMap] = useState<Record<string, boolean>>({})
   const [characters, setCharacters] = useState<CharacterMeta[]>([])
-  const [agentCharMap, setAgentCharMap] = useState<Record<string, string>>({})
+  const [agentCharMap, _setAgentCharMap] = useState<Record<string, string>>({})
   const [miniChar, setMiniChar] = useState<CharacterMeta | null>(null)
   // ─── Codex sprite pet (mini mode) ───
   // miniPet is the user-selected codex pet rendered in every mini slot.
@@ -345,21 +324,16 @@ export default function Mini() {
   }, [])
 
   const [allSessions, setAllSessions] = useState<MiniSessionInfo[]>([])
-  const [anySessionActive, setAnySessionActive] = useState(false)
-  const [refreshingAgents, setRefreshingAgents] = useState(false)
+  const [anySessionActive, _setAnySessionActive] = useState(false)
+  const [refreshingAgents, _setRefreshingAgents] = useState(false)
   // Snapshot of connection config to detect changes across settings edits
-  const lastConnSnapshotRef = useRef<string>('')
-  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dismissedSessionsRef = useRef<Map<string, number>>(new Map())
 
   // Agent detail
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
-  const [metrics, setMetrics] = useState<AgentMetrics | null>(null)
-  const [extraInfo, setExtraInfo] = useState<any>(null)
 
   // OpenClaw session chat
   const [selectedSessionKey, setSelectedSessionKey] = useState<{ agentId: string; key: string } | null>(null)
-  const [sessionMessages, setSessionMessages] = useState<any[]>([])
 
   // Claude Code & Cursor
   const [claudeSessions, setClaudeSessions] = useState<any[]>([])
@@ -411,7 +385,7 @@ export default function Mini() {
   const [selectedClaudeSession, setSelectedClaudeSession] = useState<string | null>(null)
   const [claudeConversation, setClaudeConversation] = useState<any[]>([])
   const [showClaudeStats, setShowClaudeStats] = useState(false)
-  const [claudeStatsSource, setClaudeStatsSource] = useState<ClaudeStatsSource>('cc')
+  const [_claudeStatsSource, setClaudeStatsSource] = useState<ClaudeStatsSource>('cc')
   const [sessionNicknames, setSessionNicknames] = useState<Record<string, string>>({})
   const [editingSessionTitle, setEditingSessionTitle] = useState<string | null>(null)
   const editingTitleValueRef = useRef('')
@@ -440,13 +414,8 @@ export default function Mini() {
     }
   }, [showPanel, editingSessionTitle, saveSessionNickname])
 
-  // OC multi-connection: qualifiedId → connection params, qualifiedId → real agent ID, qualifiedId → source label
-  const agentConnMapRef = useRef<Map<string, OcParams>>(new Map())
-  const agentRealIdMapRef = useRef<Map<string, string>>(new Map())
-  // Source label dictionary is still populated by `fetchAgents` for future
-  // multi-source UI work; the getter is unused after the pairing refactor.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_agentSourceLabels, setAgentSourceLabels] = useState<Record<string, string>>({})
+  // Source label dictionary — unused after pairing refactor
+  const [_agentSourceLabels, _setAgentSourceLabels] = useState<Record<string, string>>({})
 
   const resolveClaudeStatsSource = useCallback((source?: string): ClaudeStatsSource => {
     if (source === 'cursor') return 'cursor'
@@ -478,7 +447,7 @@ export default function Mini() {
   const [customSoundPath, setCustomSoundPath] = useState('')
   const [waitingSound, setWaitingSound] = useState(false)
   const [autoCloseCompletion, setAutoCloseCompletion] = useState(false)
-  const [petSfxEnabled, setPetSfxEnabled] = useState(true)
+  const [_petSfxEnabled, setPetSfxEnabled] = useState(true)
   const petSfxEnabledRef = useRef(true)
   // Pet mode: random idle action trigger interval, in minutes (0.5 – 30, default 2).
   const [petIdleIntervalMin, setPetIdleIntervalMin] = useState(2)
@@ -629,7 +598,7 @@ export default function Mini() {
   // CSS `left:` is derived from this so it stays put when the right-side
   // context menu temporarily widens the window.
   useEffect(() => {
-    if (!(appMode === 'pet' && largeMascot)) {
+    if (!(false && largeMascot)) {
       setPetBaseWinW(null)
       return
     }
@@ -687,12 +656,8 @@ export default function Mini() {
     _setMoveMode(v)
   }
 
-  const { t, i18n } = useTranslation()
-  // URL is sourced from `ui.petdex.url`. We deliberately do NOT fall
-  // URL is sourced from `ui.petdex.url`. We deliberately do NOT fall
-  // back to a hardcoded value — when the fetch fails or the field is
-  // missing, PetPicker shows a "network error" message so users
-  const [petdexUrl] = useState<string | null>('https://codexpet.xyz')
+  const { t } = useTranslation()
+  const petdexUrl = 'https://codexpet.xyz'
 
   // Load mini character from store
   const loadMiniChar = useCallback(async () => {
@@ -755,7 +720,7 @@ export default function Mini() {
 
   // React to hunger changes (e.g. from Dev slider) — switch to/from hungry
   useEffect(() => {
-    if (appMode !== 'pet') return
+    if (true) return
     if (petData.hunger < 30 && petActionPriority(currentPetAction) < petActionPriority('hungry')) {
       setCurrentPetAction('hungry')
       currentPetActionRef.current = 'hungry'
@@ -767,7 +732,7 @@ export default function Mini() {
 
   // Pet mode: periodic tick for hunger/affection decay (every 5 min)
   useEffect(() => {
-    if (appMode !== 'pet') return
+    if (true) return
     const tick = async () => {
       const ticked = tickPetData(petDataRef.current)
       setPetData(ticked)
@@ -787,7 +752,7 @@ export default function Mini() {
 
   // Pet mode always forces large mascot
   useEffect(() => {
-    if (appMode === 'pet' && !largeMascot) {
+    if (false && !largeMascot) {
       setLargeMascot(true)
       largeMascotRef.current = true
       load('settings.json', { defaults: {}, autoSave: true }).then(async (store) => {
@@ -830,7 +795,7 @@ export default function Mini() {
   }, [])
   useEffect(() => {
     if (idleCheckRef.current) { clearInterval(idleCheckRef.current); idleCheckRef.current = null }
-    if (appMode !== 'pet') return
+    if (true) return
     const check = async () => {
       const cur = currentPetActionRef.current
       if (petActionPriority(cur) >= petActionPriority('hungry')) return
@@ -866,7 +831,7 @@ export default function Mini() {
       clearTimeout(idleAutoTimerRef.current)
       idleAutoTimerRef.current = null
     }
-    if (appMode !== 'pet' || currentPetAction !== 'idle' || petActionPriority(currentPetAction) > 0) return
+    if (true || currentPetAction !== 'idle' || petActionPriority(currentPetAction) > 0) return
     const intervalMs = Math.max(30_000, Math.round(petIdleIntervalMin * 60_000))
     idleAutoTimerRef.current = setTimeout(() => {
       if (currentPetActionRef.current !== 'idle' || petActionPriority(currentPetActionRef.current) > 0) return
@@ -891,9 +856,9 @@ export default function Mini() {
   const transientTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (transientTimeoutRef.current) { clearTimeout(transientTimeoutRef.current); transientTimeoutRef.current = null }
-    if (appMode !== 'pet' || !TRANSIENT_PET_ACTIONS.includes(currentPetAction)) return
+    if (true || !TRANSIENT_PET_ACTIONS.includes(currentPetAction)) return
     transientTimeoutRef.current = setTimeout(() => {
-      if (appModeRef.current === 'pet' && TRANSIENT_PET_ACTIONS.includes(currentPetActionRef.current)) {
+      if (false && TRANSIENT_PET_ACTIONS.includes(currentPetActionRef.current)) {
         console.warn('[pet] transient action timed out:', currentPetActionRef.current)
         const d = petDataRef.current
         const next: PetAction = d.hunger < 30 ? 'hungry' : 'idle'
@@ -935,7 +900,7 @@ export default function Mini() {
   const petAudioRef = useRef<HTMLAudioElement | null>(null)
   const petAudioMapRef = useRef<Record<string, string> | null>(null)
   useEffect(() => {
-    const jsonUrl = appMode === 'pet'
+    const jsonUrl = false
       ? `${PET_BUILTIN_BASE}/audio.json`
       : (() => {
           if (!miniChar?.largeActions) return ''
@@ -962,7 +927,7 @@ export default function Mini() {
         petAudioMapRef.current = resolved
       })
       .catch(e => console.error('[pet-audio] fetch error:', e))
-  }, [miniChar, appMode])
+  }, [miniChar])
 
   const petSfxPlayingRef = useRef(false)
   // Throttle grasp/drag audio: at most one play per 10s window so rapid
@@ -970,7 +935,7 @@ export default function Mini() {
   const lastGraspAudioAtRef = useRef(0)
   const GRASP_AUDIO_THROTTLE_MS = 10_000
   const playPetAudio = useCallback((action: PetAction) => {
-    if (appModeRef.current !== 'pet') return
+    if (true) return
     if (!petSfxEnabledRef.current) return
     if (action === 'grasp') {
       const now = Date.now()
@@ -989,10 +954,8 @@ export default function Mini() {
     const map = petAudioMapRef.current || FALLBACK_AUDIO
     const src = map[action]
     if (!src) return
-    if (petAudioRef.current) {
-      petAudioRef.current.pause()
-      petAudioRef.current.currentTime = 0
-    }
+    petAudioRef.current?.pause()
+    if (petAudioRef.current) { (petAudioRef.current as HTMLAudioElement).currentTime = 0 }
     const audio = new Audio(src)
     audio.volume = 0.6
     petAudioRef.current = audio
@@ -1005,9 +968,9 @@ export default function Mini() {
 
   // Pet mode: activity affection gain (watch/music: +1 per 10 min)
   useEffect(() => {
-    if (appMode !== 'pet') return
+    if (true) return
     if (currentPetAction !== 'watch' && currentPetAction !== 'music') {
-      if (activityTimerRef.current) clearInterval(activityTimerRef.current)
+      if (activityTimerRef.current) clearInterval(activityTimerRef.current as ReturnType<typeof setInterval>)
       activityTimerRef.current = null
       return
     }
@@ -1020,7 +983,7 @@ export default function Mini() {
       await savePetData(d)
     }, 10 * 60 * 1000)
     return () => {
-      if (activityTimerRef.current) clearInterval(activityTimerRef.current)
+      if (activityTimerRef.current) clearInterval(activityTimerRef.current as ReturnType<typeof setInterval>)
     }
   }, [appMode, currentPetAction])
 
@@ -1032,7 +995,7 @@ export default function Mini() {
       clearInterval(musicDanceTimerRef.current)
       musicDanceTimerRef.current = null
     }
-    if (appMode !== 'pet' || currentPetAction !== 'music') return
+    if (true || currentPetAction !== 'music') return
     musicDanceTimerRef.current = setInterval(() => {
       if (currentPetActionRef.current !== 'music') return
       if (Math.random() < 0.1) {
@@ -1064,7 +1027,7 @@ export default function Mini() {
     // which is jarring. Pause walking while any of those are visible, and
     // skip entirely outside pet mode.
     if (
-      appMode !== 'pet' ||
+      true ||
       settingsMode ||
       settingsTransitioning ||
       expanded ||
@@ -1187,7 +1150,6 @@ export default function Mini() {
     }
   }, [
     currentPetAction,
-    appMode,
     settingsMode,
     settingsTransitioning,
     expanded,
@@ -1198,7 +1160,7 @@ export default function Mini() {
 
   // Pet mode: auto-detect music/video from frontmost app
   useEffect(() => {
-    if (appMode !== 'pet') return
+    if (true) return
     const poll = async () => {
       if (petSfxPlayingRef.current) return
       const cur = currentPetActionRef.current
@@ -1232,82 +1194,6 @@ export default function Mini() {
     return () => clearInterval(id)
   }, [appMode, getNowPlayingSafe])
 
-  const handleSelectAppMode = useCallback(async (mode: AppMode) => {
-    appModeRef.current = mode
-    await saveAppMode(mode)
-    // Record the onboarding version so we don't re-prompt this user until
-    // we bump APP_MODE_ONBOARDING_VERSION again.
-    await saveAppModeVersion(APP_MODE_ONBOARDING_VERSION)
-    if (mode === 'pet') {
-      largeMascotRef.current = true
-      const store = await load('settings.json', { defaults: {}, autoSave: true })
-      await store.set('large_mascot', true)
-      await store.save()
-      const data = await loadPetData()
-      const ticked = tickPetData(data)
-      petDataRef.current = ticked
-      await savePetData(ticked)
-      // When switching mode from inside Settings, keep the settings-sized
-      // window completely untouched. Any native resize/move call (even a
-      // theoretically idempotent set_mini_size) can produce a visible
-      // jump of the fixed-position settings overlay on macOS, so just
-      // update React state and let exitSettings handle the real layout
-      // when the user closes the panel.
-      if (settingsModeRef.current || settingsTransitioningRef.current) {
-        setAppMode(mode)
-        setLargeMascot(true)
-        setPetData(ticked)
-        return
-      }
-      // Hide window content before resizing to avoid flashing the
-      // onboarding modal at the wrong window dimensions.
-      document.documentElement.style.opacity = '0'
-      // Reposition window, then update React state, then fade in
-      await invoke('set_mini_expanded', { expanded: false, position: mascotPositionRef.current, efficiency: true, mascotScale: mascotScaleRef.current, largeMascot: true, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
-      await invoke('set_pet_mode_window', { active: true, mascotScale: mascotScaleRef.current, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
-      setAppMode(mode)
-      setLargeMascot(true)
-      setPetData(ticked)
-      // Wait for React to render the mascot and chroma key canvas to draw, then reveal.
-      // Windows needs extra frames for the canvas chroma key loop to process the first frame.
-      const reveal = () => { document.documentElement.style.opacity = '1' }
-      if (isWindowsPlatform) {
-        setTimeout(reveal, 150)
-      } else {
-        requestAnimationFrame(reveal)
-      }
-    } else {
-      setAppMode(mode)
-      // First time entering coding mode (no persisted preference): default
-      // to the large mascot so new users see it out of the box. Existing
-      // users who have explicitly toggled the size are left alone.
-      if (mode === 'coding') {
-        const store = await load('settings.json', { defaults: {}, autoSave: true })
-        const existingLM = await store.get('large_mascot')
-        if (typeof existingLM !== 'boolean') {
-          setLargeMascot(true)
-          largeMascotRef.current = true
-          await store.set('large_mascot', true)
-          await store.save()
-        }
-      }
-      // When switching mode from inside Settings, keep the settings window
-      // completely untouched. enterSettings already disabled pet pass-
-      // through, and any extra native resize/move call (even an
-      // "idempotent" set_mini_size) can visibly jump the fixed-position
-      // settings overlay on macOS. exitSettings will switch back to the
-      // correct collapsed/pet layout when the user closes the panel.
-      if (settingsModeRef.current || settingsTransitioningRef.current) {
-        return
-      }
-      // Leaving pet mode (not from settings): stop the pass-through poll first.
-      await invoke('set_pet_mode_window', { active: false, mascotScale: mascotScaleRef.current, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
-      // Restore window back to collapsed mascot size
-      try {
-        await invoke('set_mini_size', { restore: true, position: mascotPositionRef.current, mascotScale: mascotScaleRef.current, largeMascot: largeMascotRef.current, largeMascotScale: largeMascotScaleRef.current })
-      } catch {}
-    }
-  }, [])
 
   const handleUpdatePetData = useCallback(async (data: PetData) => {
     setPetData(data)
@@ -1519,7 +1405,7 @@ export default function Mini() {
       largeMascotRef.current = initialLargeMascot
       largeMascotScaleRef.current = initialLargeMascotScale
 
-      const existingModeVersion = await loadAppModeVersion()
+      await loadAppModeVersion()
       // Always default to coding mode (hybrid: CC monitoring + desktop pet).
       // No onboarding modal — just go straight to the pet view.
       const mode = (existingMode === 'pet' || existingMode === 'coding') ? existingMode : 'coding'
@@ -1542,7 +1428,7 @@ export default function Mini() {
         position: initialMascotPosition,
         efficiency: true,
         mascotScale: initialMascotScale,
-        largeMascot: mode === 'pet' ? true : initialLargeMascot,
+        largeMascot: initialLargeMascot,
         largeMascotScale: initialLargeMascotScale,
       }).catch(() => {})
       if (mode === 'pet') {
@@ -1605,11 +1491,11 @@ export default function Mini() {
 
   // ─── Character + config polling ───
   useEffect(() => {
-    if (appMode !== 'coding') return
+    
     fetchAgents()
     const a = setInterval(fetchAgents, 5000)
     return () => clearInterval(a)
-  }, [fetchAgents, appMode])
+  }, [fetchAgents])
 
 
   // Load feature toggles
@@ -1664,7 +1550,7 @@ export default function Mini() {
         autoExpandOnTaskRef.current = aet
       }
       const lm = await store.get('large_mascot')
-      if (typeof lm === 'boolean' && appModeRef.current !== 'pet') {
+      if (typeof lm === 'boolean' && true) {
         setLargeMascot(lm)
         largeMascotRef.current = lm
       }
@@ -1708,7 +1594,7 @@ export default function Mini() {
 
   // Poll Claude/Codex/Cursor sessions
   useEffect(() => {
-    if (appMode !== 'coding') { setClaudeSessions([]); return }
+    
     if (!(enableClaudeCode || enableClaudeDesktop || enableCodex || enableCursor)) {
       setClaudeSessions([])
       return
@@ -1793,7 +1679,7 @@ export default function Mini() {
     poll()
     const t = setInterval(poll, 2000)
     return () => clearInterval(t)
-  }, [enableClaudeCode, enableClaudeDesktop, enableCodex, enableCursor, appMode])
+  }, [enableClaudeCode, enableClaudeDesktop, enableCodex, enableCursor])
 
   // Listen for Claude/Codex/Cursor task completion → play sound
   const soundEnabledRef = useRef(soundEnabled)
@@ -1819,7 +1705,7 @@ export default function Mini() {
   const enableClaudeDesktopRef = useRef(enableClaudeDesktop)
   enableClaudeDesktopRef.current = enableClaudeDesktop
   useEffect(() => {
-    if (appMode !== 'coding') return
+    
     if (!(enableClaudeCode || enableClaudeDesktop || enableCodex || enableCursor)) return
     const unlisten = listen('claude-task-complete', (ev: any) => {
       const currentSession = claudeSessionsRef.current.find((s) => s.sessionId === ev.payload?.sessionId)
@@ -1852,7 +1738,7 @@ export default function Mini() {
     return () => {
       unlisten.then((fn) => fn())
     }
-  }, [enableClaudeCode, enableClaudeDesktop, enableCodex, enableCursor, appMode])
+  }, [enableClaudeCode, enableClaudeDesktop, enableCodex, enableCursor])
 
   // Fetch Claude conversation when selected
   useEffect(() => {
@@ -2013,7 +1899,7 @@ export default function Mini() {
     (e: React.PointerEvent) => {
       // Pet mode: right-click / ctrl+click toggles context menu
       const isRightClick = e.button === 2 || (e.button === 0 && e.ctrlKey)
-      if (isRightClick && appModeRef.current === 'pet' && largeMascotRef.current) {
+      if (isRightClick && false && largeMascotRef.current) {
         e.preventDefault()
         e.stopPropagation()
         if (petContextMenuTransitionRef.current) return
@@ -2045,7 +1931,7 @@ export default function Mini() {
       // Coding mode collapsed mascot: drag to reposition, click (no movement)
       // to expand the panel. Drag direction is mirrored into the codex
       // sprite via updateWalkDir so the pet visibly runs while moving.
-      if (!moveModeRef.current && appModeRef.current !== 'pet') {
+      if (!moveModeRef.current && true) {
         if (e.button !== 0 || e.ctrlKey || collapsingRef.current) return
         // On macOS the cursor poll in lib.rs (efficiency_hover_poll) drives
         // the drag itself via translate_mini_frame + mini-mascot-walk events.
@@ -2208,7 +2094,7 @@ export default function Mini() {
               setLargePetAction('grasp')
               largePetActionRef.current = 'grasp'
               playPetAudio('grasp')
-              if (appModeRef.current === 'pet') {
+              if (false) {
                 setCurrentPetAction('grasp')
                 currentPetActionRef.current = 'grasp'
               }
@@ -2226,7 +2112,7 @@ export default function Mini() {
           if (largePetActionRef.current === 'grasp') {
             setLargePetAction(null)
             largePetActionRef.current = null
-            if (appModeRef.current === 'pet') {
+            if (false) {
               checkEdgeAndSetPeek()
             }
           }
@@ -2252,7 +2138,7 @@ export default function Mini() {
               await store.save()
             })
           } else {
-            if (appModeRef.current === 'pet') {
+            if (false) {
               if (currentPetActionRef.current === 'peek') {
                 handleSetPetAction('walkout')
                 playPetAudio('walkout')
@@ -2292,7 +2178,7 @@ export default function Mini() {
 
       // Normal mode (small mascot): click to expand (coding mode only)
       if (!isMoveMode) {
-        if (appModeRef.current === 'pet') return // no panel in pet mode
+        
         hoverExpandedRef.current = false
         setCompletionSessionId(null)
         expand()
@@ -2320,7 +2206,7 @@ export default function Mini() {
             if (largeMascotRef.current) {
               setLargePetAction('grasp')
               largePetActionRef.current = 'grasp'
-              if (appModeRef.current === 'pet') {
+              if (false) {
                 setCurrentPetAction('grasp')
                 currentPetActionRef.current = 'grasp'
               }
@@ -2343,7 +2229,7 @@ export default function Mini() {
         if (largeMascotRef.current && largePetActionRef.current === 'grasp') {
           setLargePetAction(null)
           largePetActionRef.current = null
-          if (appModeRef.current === 'pet') {
+          if (false) {
             checkEdgeAndSetPeek()
           }
         }
@@ -2461,11 +2347,11 @@ export default function Mini() {
       document.documentElement.style.opacity = '0'
       try {
         await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
-        if (wasSettings && appModeRef.current === 'pet' && largeMascotRef.current) {
+        if (wasSettings && false && largeMascotRef.current) {
           await invoke('set_mini_expanded', { expanded: false, position: mascotPositionRef.current, efficiency: true, mascotScale: mascotScaleRef.current, largeMascot: true, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
           await invoke('set_pet_mode_window', { active: true, mascotScale: mascotScaleRef.current, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
           if (petOriginBeforeSettingsRef.current) {
-            const [x, y] = petOriginBeforeSettingsRef.current
+            const [x, y] = petOriginBeforeSettingsRef.current as [number, number]
             await invoke('set_mini_origin', { x, y }).catch(() => {})
             petOriginBeforeSettingsRef.current = null
           }
@@ -2513,7 +2399,7 @@ export default function Mini() {
   // A Rust-side 50ms poll of NSEvent.mouseLocation emits "efficiency-hover"
   // events which we handle here to open / close the panel on hover.
   useEffect(() => {
-    if (appMode === 'pet') {
+    if (false) {
       invoke('set_efficiency_hover_tracking', { active: false }).catch(() => {})
     } else if (viewMode === 'efficiency' && !moveMode && !settingsMode && !settingsTransitioning) {
       invoke('set_efficiency_hover_tracking', { active: true }).catch(() => {})
@@ -2523,7 +2409,7 @@ export default function Mini() {
     return () => {
       invoke('set_efficiency_hover_tracking', { active: false }).catch(() => {})
     }
-  }, [viewMode, moveMode, settingsMode, settingsTransitioning, appMode])
+  }, [viewMode, moveMode, settingsMode, settingsTransitioning])
 
   // Bridge the Rust cursor poll's `mini-mascot-hover` event to local state
   // so the codex sprite can play its jump animation on hover even before
@@ -2531,7 +2417,7 @@ export default function Mini() {
   // mouseEntered to non-key floating windows, which is why webview-only
   // hover handling alone leaves the mascot frozen until first click.
   useEffect(() => {
-    if (appMode === 'pet') return
+    if (false) return
     const unlisten = listen<boolean>('mini-mascot-hover', (event) => {
       setMascotHover(!!event.payload)
     })
@@ -2544,7 +2430,7 @@ export default function Mini() {
   // The poll thread emits walk-dir = -1 / 1 / 0 as the user drags the
   // mascot horizontally so the sprite matches the drag direction.
   useEffect(() => {
-    if (appMode === 'pet') return
+    if (false) return
     const unlisten = listen<number>('mini-mascot-walk', (event) => {
       const dir = event.payload
       if (dir === 1 || dir === -1 || dir === 0) {
@@ -2559,7 +2445,7 @@ export default function Mini() {
   // Persist the mascot's new origin after a Rust-driven drag finishes so
   // the position survives across collapsed/expanded mode switches.
   useEffect(() => {
-    if (appMode === 'pet') return
+    if (false) return
     const unlisten = listen('mini-mascot-drag-end', async () => {
       try {
         const pos = (await invoke('get_mini_origin')) as [number, number]
@@ -2578,7 +2464,7 @@ export default function Mini() {
   }, [appMode])
 
   useEffect(() => {
-    if (viewMode !== 'efficiency' || appMode === 'pet') return
+    if (viewMode !== 'efficiency' || false) return
     const unlisten = listen<boolean>('efficiency-hover', (event) => {
       if (settingsModeRef.current || settingsTransitioningRef.current) {
         return
@@ -2624,7 +2510,7 @@ export default function Mini() {
         hoverOpenTimerRef.current = null
       }
     }
-  }, [viewMode, collapse, appMode])
+  }, [viewMode, collapse])
 
   const petOriginBeforeSettingsRef = useRef<[number, number] | null>(null)
 
@@ -2637,9 +2523,9 @@ export default function Mini() {
     setSelectedClaudeSession(null)
     setSelectedSessionKey(null)
     setShowClaudeStats(false)
-    setSettingsNav(appModeRef.current === 'pet' ? 'settings' : 'pairing')
+    setSettingsNav('pairing')
     // Save pet mode window origin so we can restore it exactly
-    if (appModeRef.current === 'pet') {
+    if (false) {
       try {
         const pos = await invoke('get_mini_origin') as [number, number]
         petOriginBeforeSettingsRef.current = pos
@@ -2648,7 +2534,7 @@ export default function Mini() {
     setShowSettingsOverlay(false)
     setSettingsTransitioning(true)
     // Stop pet passthrough poll before resizing to settings mode
-    if (appModeRef.current === 'pet') {
+    if (false) {
       await invoke('set_pet_mode_window', { active: false, mascotScale: mascotScaleRef.current, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
     }
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
@@ -2704,13 +2590,13 @@ export default function Mini() {
       setExpanded(false)
       expandedRef.current = false
       expandedWindowModeRef.current = null
-      if (appModeRef.current === 'pet' && largeMascotRef.current) {
+      if (false && largeMascotRef.current) {
         // Pet mode: restore pet-sized window directly, skip syncExpandedWindowLayout
         await invoke('set_mini_expanded', { expanded: false, position: mascotPositionRef.current, efficiency: true, mascotScale: mascotScaleRef.current, largeMascot: true, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
         await invoke('set_pet_mode_window', { active: true, mascotScale: mascotScaleRef.current, largeMascotScale: largeMascotScaleRef.current }).catch(() => {})
         // Restore exact window position saved before entering settings
         if (petOriginBeforeSettingsRef.current) {
-          const [x, y] = petOriginBeforeSettingsRef.current
+          const [x, y] = petOriginBeforeSettingsRef.current as [number, number]
           await invoke('set_mini_origin', { x, y }).catch(() => {})
           petOriginBeforeSettingsRef.current = null
         }
@@ -2854,7 +2740,7 @@ export default function Mini() {
     // we explicitly suppressed in the pointerdown handler.
     if (!isWindowsPlatform) return
     const onFocus = () => {
-      if (appModeRef.current === 'pet') return // no auto-expand in pet mode
+      
       if (collapsingRef.current || moveModeRef.current || mascotDragActiveRef.current) return
       // Large mascot uses long-press to expand; auto-expand on focus
       // would race with the pointerdown handler and steal the click.
@@ -2947,7 +2833,7 @@ export default function Mini() {
     const c = characters.find((ch) => ch.largeActions && Object.keys(ch.largeActions).length > 0)
     return c?.largeActions
   }, [characters])
-  const largeCharForRender = (appMode === 'pet' || appMode === 'coding')
+  const largeCharForRender = (false || appMode === 'coding')
     ? ({ name: '香企鹅', largeActions: petBuiltinLargeActions } as CharacterMeta)
     : miniChar
   // hasAnyLargeActions used to gate the legacy header toggle. Toggling is
@@ -2955,7 +2841,7 @@ export default function Mini() {
   // mode), so the predicate itself is no longer referenced — but we keep
   // the computation cheap in case future logic wants to read it.
   const largeVideoBaseUrl = largeMascot
-    ? appMode === 'pet'
+    ? false
       ? getLargeVideoPetMode(largeCharForRender ?? undefined, currentPetAction, fallbackLargeActions)
       : getLargeVideo(largeCharForRender ?? undefined, mainPetState, largePetAction, fallbackLargeActions)
     : undefined
@@ -3079,7 +2965,6 @@ export default function Mini() {
   }, [largeVideoUrl, expanded, hiding])
 
   const inAgentDetail = selectedAgentId !== null
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId)
   const inDetailPage = inAgentDetail || selectedClaudeSession !== null || selectedSessionKey !== null || showClaudeStats
   const detailPageMaxHeight = typeof window !== 'undefined' ? Math.max(240, Math.floor(((window.screen?.availHeight || 800) * 0.75) / Math.max(uiScale, 0.01))) : 600
 
@@ -3241,7 +3126,7 @@ export default function Mini() {
         width: '100vw',
         height: '100vh',
         background: 'transparent',
-        overflow: (appMode === 'pet' && largeMascot) ? 'visible' : 'hidden',
+        overflow: (false && largeMascot) ? 'visible' : 'hidden',
         userSelect: 'none',
       }}
     >
@@ -3256,9 +3141,9 @@ export default function Mini() {
             width: '100%',
             height: '100%',
             position: 'relative',
-            display: (appMode === 'pet' && largeMascot) ? 'block' : 'flex',
-            alignItems: (appMode === 'pet' && largeMascot) ? undefined : 'center',
-            justifyContent: (appMode === 'pet' && largeMascot) ? undefined : 'center',
+            display: (false && largeMascot) ? 'block' : 'flex',
+            alignItems: (false && largeMascot) ? undefined : 'center',
+            justifyContent: (false && largeMascot) ? undefined : 'center',
             // No background. Used to be `rgba(0,0,0,0.01)` to coax macOS
             // WKWebView into delivering hover events on transparent area,
             // but mini-panel no longer uses panel-level hover/click
@@ -3276,8 +3161,8 @@ export default function Mini() {
             onMouseMove={undefined}
             onMouseLeave={undefined}
             style={{
-              position: (appMode === 'pet' && largeMascot) ? 'absolute' : 'relative',
-              bottom: (appMode === 'pet' && largeMascot) ? 0 : undefined,
+              position: (false && largeMascot) ? 'absolute' : 'relative',
+              bottom: (false && largeMascot) ? 0 : undefined,
               // Anchor mascot to a fixed window-x equal to the pet-mode
               // window's "no-menu" inner width minus mascot CSS width.
               // This matches the previous `right: 0` visual position but
@@ -3285,10 +3170,10 @@ export default function Mini() {
               // widens the window, avoiding any race between React CSS
               // commit and native window resize.
               // Fallback to `right: 0` until petBaseWinW has been measured.
-              left: (appMode === 'pet' && largeMascot && petBaseWinW != null)
-                ? Math.max(0, Math.round(petBaseWinW - largeMascotVisualSize))
+              left: (false && largeMascot && petBaseWinW != null)
+                ? Math.max(0, Math.round((petBaseWinW as number) - largeMascotVisualSize))
                 : undefined,
-              right: (appMode === 'pet' && largeMascot && petBaseWinW == null)
+              right: (false && largeMascot && petBaseWinW == null)
                 ? 0
                 : undefined,
               overflow: 'visible',
@@ -3300,7 +3185,7 @@ export default function Mini() {
                 ? 'grab'
                 : (currentPetAction === 'peek' ? 'default' : 'pointer'),
               animation: moveMode ? 'movePulse 1.2s ease-in-out infinite' : 'none',
-              display: (appMode === 'pet' && (showSettingsOverlay || settingsTransitioning)) ? 'none' : undefined,
+              display: (false && (showSettingsOverlay || settingsTransitioning)) ? 'none' : undefined,
               ...(moveMode
                 ? {
                     borderRadius: 12,
@@ -3363,14 +3248,14 @@ export default function Mini() {
                     key={idx}
                     ref={ref}
                     autoPlay={isFront}
-                    loop={!(appMode === 'pet' && TRANSIENT_PET_ACTIONS.includes(currentPetAction))}
+                    loop={!(false && TRANSIENT_PET_ACTIONS.includes(currentPetAction))}
                     muted
                     playsInline
                     preload="auto"
                     onError={(e) => {
                       if (!isFront) return
                       console.warn('[large-video] error:', (e.target as HTMLVideoElement).error?.message, 'src:', largeVideoUrl)
-                      if (appModeRef.current === 'pet' && TRANSIENT_PET_ACTIONS.includes(currentPetActionRef.current)) {
+                      if (false && TRANSIENT_PET_ACTIONS.includes(currentPetActionRef.current)) {
                         const d = petDataRef.current
                         const next: PetAction = d.hunger < 30 ? 'hungry' : 'idle'
                         setCurrentPetAction(next)
@@ -3379,7 +3264,7 @@ export default function Mini() {
                     }}
                     onEnded={() => {
                       if (!isFront) return
-                      if (appModeRef.current === 'pet' && TRANSIENT_PET_ACTIONS.includes(currentPetActionRef.current)) {
+                      if (false && TRANSIENT_PET_ACTIONS.includes(currentPetActionRef.current)) {
                         if (currentPetActionRef.current === 'farewell') {
                           invoke('exit_app').catch(() => {})
                           return
@@ -3449,7 +3334,7 @@ export default function Mini() {
                 ?
               </div>
             )}
-            {appMode !== 'pet' && (
+            {true && (
               <div
                 style={{
                   position: 'absolute',
@@ -3464,15 +3349,15 @@ export default function Mini() {
               />
             )}
             {/* Pomodoro timer overlay (pet mode, study action) */}
-            {appMode === 'pet' && largeMascot && pomodoro?.active && (
+            {false && largeMascot && pomodoro?.active && (
               <PomodoroOverlay
-                pomodoro={pomodoro}
+                pomodoro={pomodoro as import('./lib/petStore').PomodoroState}
                 mascotSize={largeMascotVisualSize}
                 onStop={handleStopPomodoro}
               />
             )}
             {/* Pet mode context menu: status bar above + buttons on left */}
-            {appMode === 'pet' && largeMascot && (
+            {false && largeMascot && (
               <PetContextMenu
                 open={petContextMenuOpen}
                 petData={petData}
@@ -4719,7 +4604,7 @@ export default function Mini() {
                     >
                       <span style={{ fontSize: 13 }}>&lsaquo;</span> {t('common.back')}
                     </button>
-                    {(appMode === 'pet' ? ['settings'] as const : ['pairing', 'settings'] as const).map((nav) => (
+                    {(false ? ['settings'] as const : ['pairing', 'settings'] as const).map((nav) => (
                       <button
                         key={nav}
                         data-no-drag
@@ -4775,6 +4660,7 @@ export default function Mini() {
                               await store.save()
                             }
                           }}
+                          petdexUrl={petdexUrl}
                           specialPets={[
                             {
                               id: '__xiang-qi-e__',
@@ -4813,7 +4699,6 @@ export default function Mini() {
                             debugToTerminal('dialog', 'settingsPickerOpen=false')
                             setNativeDialogActive(false)
                           }}
-                          petdexUrl={petdexUrl}
                         />
                       </div>
                     </div>
@@ -4849,20 +4734,6 @@ export default function Mini() {
                           setSoundEnabled(v)
                           const store = await getStore()
                           await store.set('sound_enabled', v)
-                          await store.save()
-                        }}
-                        codexSoundEnabled={codexSoundEnabled}
-                        onToggleCodexSoundEnabled={async (v) => {
-                          setCodexSoundEnabled(v)
-                          const store = await getStore()
-                          await store.set('codex_sound_enabled', v)
-                          await store.save()
-                        }}
-                        cursorSoundEnabled={cursorSoundEnabled}
-                        onToggleCursorSoundEnabled={async (v) => {
-                          setCursorSoundEnabled(v)
-                          const store = await getStore()
-                          await store.set('cursor_sound_enabled', v)
                           await store.save()
                         }}
                         waitingSound={waitingSound}
@@ -4923,25 +4794,6 @@ export default function Mini() {
                           largeMascotScaleRef.current = clamped
                           const store = await getStore()
                           await store.set('large_mascot_scale', clamped)
-                          await store.save()
-                        }}
-                        appMode={appMode}
-                        onChangeAppMode={handleSelectAppMode}
-                        petSfxEnabled={petSfxEnabled}
-                        onTogglePetSfxEnabled={async (v) => {
-                          setPetSfxEnabled(v)
-                          petSfxEnabledRef.current = v
-                          const store = await getStore()
-                          await store.set('pet_sfx_enabled', v)
-                          await store.save()
-                        }}
-                        petIdleIntervalMin={petIdleIntervalMin}
-                        onChangePetIdleIntervalMin={async (v) => {
-                          const clamped = Math.min(30, Math.max(0.5, v))
-                          setPetIdleIntervalMin(clamped)
-                          petIdleIntervalMinRef.current = clamped
-                          const store = await getStore()
-                          await store.set('pet_idle_interval_min', clamped)
                           await store.save()
                         }}
                       />

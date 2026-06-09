@@ -10,7 +10,6 @@ import {
   FolderPlus,
   Loader2,
   Plus,
-  Sparkles,
   X as XIcon,
 } from 'lucide-react'
 import { SpritePet } from './SpritePet'
